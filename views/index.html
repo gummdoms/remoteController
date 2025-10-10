@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="es-CO">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="/node_modules/bootstrap-icons/font/bootstrap-icons.min.css" />
+    <link rel="stylesheet" href="/node_modules/normalize.css/normalize.css" />
+    <link rel="stylesheet" href="/static/css/index.view.css">
+    <link rel="shortcut icon" href="/static/img/icon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="/node_modules/sweetalert2/dist/sweetalert2.min.css">
+    <script src="/node_modules/jquery/dist/jquery.min.js"></script>
+    <script src="/node_modules/sweetalert2/dist/sweetalert2.all.js"></script>
+    <title>Remote Controller</title>
+</head>
+
+<body>
+    <main class="container-web-movil">
+        <div class="content-view-all-movil">
+            <section class="container-modules container-modules-1">
+                <div class="form-group">
+                    <label for="brillo">Brillo</label>
+                    <input type="range" class="form-control-range" id="brillo" min="0" max="100" step="1">
+                    <span class="text-quantity-brillo">50</span>
+                </div>
+                <div class="form-group">
+                    <label for="contraste">Contraste</label>
+                    <input type="range" class="form-control-range" id="contraste" min="0" max="100" step="1">
+                    <span class="text-quantity-contraste">50</span>
+                </div>
+                <div class="form-group">
+                    <label for="volumen">Volumen</label>
+                    <input type="range" class="form-control-range" id="volumen" min="0" max="100" step="1">
+                    <div class="volume-data-options">
+                        <span class="text-quantity-volumen">50</span>
+                        <button class="icon-volumen">
+                            <i class="bi bi-volume-mute"></i>
+                        </button>
+                    </div>
+
+                </div>
+            </section>
+            <section class="container-modules container-modules-2">
+                <div class="screen-container">
+                    <button class="btn btn-primary btn-screen" id="pantallaPrincipal" title="Solo Pantalla Principal">
+                        <img src="./static/img/solopc.png" alt="solo pc">
+                        <span class="text-screen">Principal</span>
+                    </button>
+                    <button class="btn btn-primary btn-screen" id="pantallaSecundaria" title="Solo Pantalla Secundaria">
+                        <img src="./static/img/secundaria.png" alt="secundaria">
+                        <span class="text-screen">Secundaria</span>
+                    </button>
+                    <button class="btn btn-primary btn-screen" id="ampliar" title="Ampliar Pantalla Principal">
+                        <img src="./static/img/ampliar.png" alt="ampliar">
+                        <span class="text-screen">Ampliar</span>
+                    </button>
+                    <button class="btn btn-primary btn-screen" id="duplicar" title="Duplicar Pantalla Principal">
+                        <img src="./static/img/duplicar.png" alt="duplicar">
+                        <span class="text-screen">Duplicar</span>
+                    </button>
+                </div>
+            </section>
+            <section class="container-modules container-modules-3">
+                <div class="app-container">
+                    <button class="btn btn-primary btn-pc" id="app-cerrar" title="Cerrar app">
+                        <i class="bi bi-power"></i>
+                        <span class="text-pc">Cerrar</span>
+                    </button>
+                    <button class="btn btn-primary btn-pc" id="app-reiniciar" title="Reiniciar">
+                        <i class="bi bi-arrow-repeat"></i>
+                        <span class="text-pc">Reiniciar</span>
+                    </button>
+                    <button class="btn btn-primary btn-pc" id="app-ocultar" title="Ocultar app">
+                        <i class="bi bi-eye-slash"></i>
+                        <span class="text-pc">Ocultar</span>
+                    </button>
+                    <button class="btn btn-primary btn-pc" id="app-mostrar" title="Mostrar app">
+                        <i class="bi bi-eye"></i>
+                        <span class="text-pc">Mostrar</span>
+                    </button>
+                </div>
+            </section>
+            <section class="container-modules container-modules-4">
+                <button class="btn-add-app-direct">
+                    <i class="bi bi-plus"></i>
+                </button>
+                <div class="apps-container">
+
+                </div>
+            </section>
+        </div>
+    </main>
+    <aside class="container-teclados">
+        <div class="teclado"></div>
+    </aside>
+
+    <!-- Touchpad Virtual para control del mouse -->
+    <aside class="container-touchpad">
+        <div class="touchpad-header">
+            <span class="touchpad-title">Touchpad</span>
+            <!-- boton para indicar que se va a seleccionar como si fuese un click izquierdo presionado -->
+            <button class="btn-touchpad-hold" title="Mantener Click Izquierdo">
+                <i class="bi bi-hand-index-thumb"></i>
+            </button>
+            <button class="btn-touchpad-close">
+                <i class="bi bi-x"></i>
+            </button>
+        </div>
+        <div class="touchpad-area" id="touchpad">
+            <div class="touchpad-hint">
+                <i class="bi bi-hand-index"></i>
+                <span>Desliza para mover el cursor</span>
+            </div>
+        </div>
+        <div class="touchpad-buttons">
+            <button class="touchpad-btn" id="touchpad-left-click" title="Click Izquierdo">
+                <i class="bi bi-hand-index-thumb"></i>
+                <span>L</span>
+            </button>
+            <button class="touchpad-btn" id="touchpad-scroll-toggle" title="Modo Scroll">
+                <i class="bi bi-arrows-vertical"></i>
+                <span>S</span>
+            </button>
+            <button class="touchpad-btn" id="touchpad-right-click" title="Click Derecho">
+                <i class="bi bi-hand-index-thumb"></i>
+                <span>R</span>
+            </button>
+        </div>
+    </aside>
+
+    <button class="btn-teclado-show">
+        <i class="bi bi-keyboard"></i>
+    </button>
+
+    <button class="btn-touchpad-show">
+        <i class="bi bi-cursor"></i>
+    </button>
+    <aside class="container-option-pc">
+        <div class="container-option-pc-1">
+            <button class="btn btn-primary btn-pc" id="apagar" title="Apagar">
+                <i class="bi bi-power"></i>
+                <span class="text-pc">Apagar</span>
+            </button>
+            <button class="btn btn-primary btn-pc" id="reiniciar" title="Reiniciar">
+                <i class="bi bi-arrow-repeat"></i>
+                <span class="text-pc">Reiniciar</span>
+            </button>
+            <button class="btn btn-primary btn-pc" id="close_session" title="Cerrar sesión">
+                <i class="bi bi-box-arrow-right"></i>
+                <span class="text-pc">Cerrar Sesión</span>
+            </button>
+            <button class="btn btn-primary btn-pc" id="suspender" title="Suspender">
+                <i class="bi bi-moon"></i>
+                <span class="text-pc">Suspender</span>
+            </button>
+        </div>
+    </aside>
+    <button class="btn-otion-pc-show">
+        <i class="bi bi-power"></i>
+    </button>
+
+    <aside class="select-dir">
+        <div class="container-folders-dir">
+            <div class="header-modal header-select-dir">
+                <button class="btn-return-modal-dir" id="return-modal-dir">
+                    <i class="bi bi-arrow-left"></i>
+                </button>
+                <input type="text" id="path-selected" readonly placeholder="No ha seleccionado archivo"
+                    class="form-control">
+                <button class="btn-close-modal-dir" id="close-modal-dir">
+                    <i class="bi bi-x"></i>
+                </button>
+            </div>
+            <div class="body-modal body-select-dir">
+
+            </div>
+        </div>
+    </aside>
+    <aside class="modal-add-app">
+        <div class="container-add-app">
+            <div class="header-modal">
+                <button class="btn-close-modal-add-app" id="close-modal-add-app">
+                    <i class="bi bi-x"></i>
+                </button>
+            </div>
+            <div class="body-modal">
+                <div class="form-group">
+                    <label for="name-app">Nombre de la app</label>
+                    <input type="text" id="name-app" class="form-control" placeholder="Nombre de la app">
+                </div>
+                <div class="form-group">
+                    <label for="type-app">Tipo de app</label>
+                    <select id="type-app" class="form-control">
+                        <option value="web">Web</option>
+                        <option value="desktop">Escritorio</option>
+                    </select>
+                </div>
+                <div class="form-group form-web-path">
+                    <label for="path-app">Ruta de la app</label>
+                    <input type="text" id="path-app-web" class="form-control" placeholder="Ruta de la app">
+                </div>
+                <div class="form-group form-desk-path d-none">
+                    <label for="path-app">Ruta de la app</label>
+                    <button class="btn btn-primary btn-select-dir" id="select-dir-app-desk">Ruta de la app</button>
+                </div>
+                <!-- icono -->
+                <div class="form-group">
+                    <label for="icon-app">Icono de la app</label>
+                    <input type="file" id="icon-app" class="form-control">
+                </div>
+            </div>
+            <div class="footer-modal">
+                <button class="btn btn-primary btn-transferir" id="btn-transferir">Transferir</button>
+                <button class="btn btn-primary btn-add-app" id="add-app">Agregar</button>
+                <button class="btn btn-primary btn-cancel" id="cancel-add-app">Cancelar</button>
+            </div>
+        </div>
+    </aside>
+    <div class="loadding">
+        <div class="circle">
+            <div class="dot1"></div>
+            <div class="dot2"></div>
+        </div>
+    </div>
+    <script src="/static/js/const.js"></script>
+    <script src="/static/js/fx.js"></script>
+    <script src="/static/js/fx-teclado.js"></script>
+    <script src="/static/js/fx-mouse.js"></script>
+    <script src="/static/js/teclado.js"></script>
+    <script src="/static/js/index.js"></script>
+    <script src="/static/js/controller_app.js"></script>
+
+</body>
+
+</html>

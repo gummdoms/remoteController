@@ -1,0 +1,101 @@
+*,
+*::after,
+*::before {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: sans-serif;
+}
+
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: #333;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #444;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+  cursor: pointer;
+}
+
+.header {
+  background-color: #333;
+  display: flex;
+  justify-content: flex-end;
+  height: 35px;
+  align-items: center;
+  -webkit-app-region: drag;
+}
+.header .container-buttons-win {
+  margin-right: 10px;
+}
+.header .container-buttons-win button {
+  -webkit-app-region: no-drag;
+  border: none;
+  cursor: pointer;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  color: transparent;
+  font-size: 12px;
+}
+.header .container-buttons-win button.minimize-window {
+  background-color: #f0ad4e;
+}
+.header .container-buttons-win button.minimize-window:hover {
+  background-color: rgb(236.015625, 151.21875, 30.984375);
+}
+.header .container-buttons-win button.maximize-window {
+  background-color: #5cb85c;
+}
+.header .container-buttons-win button.maximize-window:hover {
+  background-color: rgb(68.2692307692, 156.7307692308, 68.2692307692);
+}
+.header .container-buttons-win button.close-window {
+  background-color: #d9534f;
+}
+.header .container-buttons-win button.close-window:hover {
+  background-color: rgb(201.4953271028, 48.0841121495, 43.5046728972);
+}
+.header .container-buttons-win button:hover {
+  color: #fff;
+}
+
+.main {
+  height: calc(100vh - 35px);
+  background-color: #222;
+  overflow: hidden;
+}
+
+.content {
+  width: 100%;
+  height: calc(100vh - 35px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+}
+.content h1 {
+  color: #fff;
+  font-size: 30px;
+  margin-bottom: 20px;
+}
+.content button {
+  padding: 10px 20px;
+  background-color: #d9534f;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.content button:hover {
+  background-color: rgb(201.4953271028, 48.0841121495, 43.5046728972);
+}

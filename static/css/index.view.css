@@ -1,0 +1,1332 @@
+@charset "UTF-8";
+*,
+*::after,
+*::before {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: sans-serif;
+}
+
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: #333;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #444;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+  cursor: pointer;
+}
+
+.header {
+  background-color: #333;
+  display: flex;
+  justify-content: flex-end;
+  height: 35px;
+  align-items: center;
+  -webkit-app-region: drag;
+}
+.header .container-buttons-win {
+  margin-right: 10px;
+}
+.header .container-buttons-win button {
+  -webkit-app-region: no-drag;
+  border: none;
+  cursor: pointer;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  color: transparent;
+  font-size: 12px;
+}
+.header .container-buttons-win button.minimize-window {
+  background-color: #f0ad4e;
+}
+.header .container-buttons-win button.minimize-window:hover {
+  background-color: rgb(236.015625, 151.21875, 30.984375);
+}
+.header .container-buttons-win button.maximize-window {
+  background-color: #5cb85c;
+}
+.header .container-buttons-win button.maximize-window:hover {
+  background-color: rgb(68.2692307692, 156.7307692308, 68.2692307692);
+}
+.header .container-buttons-win button.close-window {
+  background-color: #d9534f;
+}
+.header .container-buttons-win button.close-window:hover {
+  background-color: rgb(201.4953271028, 48.0841121495, 43.5046728972);
+}
+.header .container-buttons-win button:hover {
+  color: #fff;
+}
+
+.container-touchpad {
+  position: fixed;
+  bottom: -100%;
+  right: 20px;
+  width: 90%;
+  max-width: 400px;
+  background: linear-gradient(135deg, #111111 0%, #000000 100%);
+  border-radius: 20px 20px 0 0;
+  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.3);
+  transition: bottom 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  z-index: 99999998;
+  overflow: hidden;
+}
+.container-touchpad.active {
+  bottom: 0;
+}
+.container-touchpad .touchpad-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 20px;
+  background: rgba(0, 0, 0, 0.2);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+.container-touchpad .touchpad-header .touchpad-title {
+  color: white;
+  font-weight: 600;
+  font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.container-touchpad .touchpad-header .touchpad-title::before {
+  content: "🖱️";
+  font-size: 1.3rem;
+}
+.container-touchpad .touchpad-header .btn-touchpad-close {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  border-radius: 50%;
+  width: 35px;
+  height: 35px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+.container-touchpad .touchpad-header .btn-touchpad-close i {
+  color: white;
+  font-size: 1.5rem;
+}
+.container-touchpad .touchpad-header .btn-touchpad-close:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: rotate(90deg);
+}
+.container-touchpad .touchpad-header .btn-touchpad-close:active {
+  transform: rotate(90deg) scale(0.9);
+}
+.container-touchpad .touchpad-header .btn-touchpad-hold {
+  margin-right: 10px;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.15);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+.container-touchpad .touchpad-header .btn-touchpad-hold i {
+  font-size: 1.4rem;
+  color: #ffffff;
+}
+.container-touchpad .touchpad-header .btn-touchpad-hold:hover {
+  background: rgba(255, 255, 255, 0.25);
+  border-color: rgba(255, 255, 255, 0.6);
+  transform: translateY(-2px);
+}
+.container-touchpad .touchpad-header .btn-touchpad-hold:active {
+  transform: translateY(0) scale(0.95);
+}
+.container-touchpad .touchpad-header .btn-touchpad-hold.active {
+  background: rgba(58, 122, 254, 0.45);
+  border-color: rgba(90, 155, 255, 0.8);
+  box-shadow: 0 0 18px rgba(90, 155, 255, 0.6);
+}
+.container-touchpad .touchpad-area {
+  width: 100%;
+  height: 300px;
+  background: rgba(255, 255, 255, 0.95);
+  margin: 15px 0;
+  border-radius: 15px;
+  cursor: grab;
+  position: relative;
+  overflow: hidden;
+  touch-action: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  box-sizing: border-box;
+  border: 2px solid transparent;
+}
+.container-touchpad .touchpad-area::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 80%;
+  height: 80%;
+  background: linear-gradient(90deg, transparent 49%, rgba(102, 126, 234, 0.1) 50%, transparent 51%), linear-gradient(0deg, transparent 49%, rgba(102, 126, 234, 0.1) 50%, transparent 51%);
+  background-size: 20px 20px;
+  pointer-events: none;
+  opacity: 0.3;
+}
+.container-touchpad .touchpad-area .touchpad-hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  color: #667eea;
+  opacity: 0.5;
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
+.container-touchpad .touchpad-area .touchpad-hint i {
+  font-size: 3rem;
+  animation: bounce 2s infinite;
+}
+.container-touchpad .touchpad-area .touchpad-hint span {
+  font-size: 0.9rem;
+  text-align: center;
+}
+.container-touchpad .touchpad-area:active .touchpad-hint {
+  opacity: 0;
+}
+.container-touchpad .touchpad-area.scroll-mode {
+  background: rgba(255, 235, 205, 0.95);
+}
+.container-touchpad .touchpad-area.scroll-mode::before {
+  background: linear-gradient(0deg, transparent 48%, rgba(255, 140, 0, 0.2) 50%, transparent 52%);
+  background-size: 10px 20px;
+}
+.container-touchpad .touchpad-area.scroll-mode .touchpad-hint i {
+  color: darkorange;
+}
+.container-touchpad .touchpad-area.selection-mode {
+  background: rgba(224, 238, 255, 0.95);
+  border: 2px solid rgba(90, 155, 255, 0.6);
+}
+.container-touchpad .touchpad-area.selection-mode::before {
+  background: linear-gradient(90deg, transparent 49%, rgba(90, 155, 255, 0.15) 50%, transparent 51%), linear-gradient(0deg, transparent 49%, rgba(90, 155, 255, 0.15) 50%, transparent 51%);
+  background-size: 18px 18px;
+  opacity: 0.5;
+}
+.container-touchpad .touchpad-area.selection-mode .touchpad-hint {
+  color: rgba(58, 122, 254, 0.9);
+  opacity: 0.8;
+}
+.container-touchpad .touchpad-area:active {
+  cursor: grabbing;
+  background: rgba(240, 240, 255, 0.95);
+}
+.container-touchpad .touchpad-buttons {
+  display: flex;
+  justify-content: space-evenly;
+  gap: 10px;
+  padding: 15px 20px 25px;
+}
+.container-touchpad .touchpad-buttons .touchpad-btn {
+  flex: 1;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.2);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 12px;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  position: relative;
+  overflow: hidden;
+}
+.container-touchpad .touchpad-buttons .touchpad-btn i {
+  font-size: 1.5rem;
+}
+.container-touchpad .touchpad-buttons .touchpad-btn span {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.1;
+  white-space: normal;
+}
+.container-touchpad .touchpad-buttons .touchpad-btn::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0);
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  transition: transform 0.5s;
+}
+.container-touchpad .touchpad-buttons .touchpad-btn:active::before {
+  transform: translate(-50%, -50%) scale(2);
+  transition: transform 0s;
+}
+.container-touchpad .touchpad-buttons .touchpad-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.5);
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+}
+.container-touchpad .touchpad-buttons .touchpad-btn:active {
+  transform: translateY(0) scale(0.95);
+}
+.container-touchpad .touchpad-buttons .touchpad-btn.active {
+  background: rgba(255, 255, 255, 0.4);
+  border-color: rgba(255, 255, 255, 0.7);
+  box-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
+}
+.container-touchpad .touchpad-buttons .touchpad-btn.drag-mode-active {
+  background: rgba(58, 122, 254, 0.4);
+  border-color: rgba(90, 155, 255, 0.9);
+  box-shadow: 0 0 25px rgba(90, 155, 255, 0.7);
+}
+.container-touchpad .touchpad-buttons .touchpad-btn.drag-mode-active span {
+  font-size: 0.7rem;
+}
+
+.btn-touchpad-show {
+  position: fixed;
+  bottom: 80px;
+  right: 20px;
+  width: 60px;
+  height: 60px;
+  background: linear-gradient(135deg, #161616 0%, #000000 100%);
+  border: none;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  box-shadow: 0 5px 20px rgba(0, 0, 0, 0.4);
+  transition: all 0.3s;
+  z-index: 9997;
+}
+.btn-touchpad-show i {
+  color: white;
+  font-size: 1.8rem;
+}
+.btn-touchpad-show:hover {
+  transform: translateY(-3px) scale(1.05);
+  box-shadow: 0 8px 30px rgba(102, 126, 234, 0.6);
+}
+.btn-touchpad-show:active {
+  transform: translateY(-1px) scale(0.98);
+}
+.btn-touchpad-show.hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0);
+}
+
+@keyframes bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+@media (max-width: 768px) {
+  .container-touchpad {
+    max-width: none;
+    width: 100%;
+    right: 0;
+    border-radius: 25px 25px 0 0;
+  }
+  .container-touchpad .touchpad-area {
+    height: 250px;
+  }
+  .btn-touchpad-show {
+    bottom: 70px;
+    right: 15px;
+    width: 55px;
+    height: 55px;
+  }
+  .btn-touchpad-show i {
+    font-size: 1.6rem;
+  }
+}
+.btn-teclado-show {
+  bottom: 20px !important;
+}
+
+.header-web-movil {
+  display: flex;
+  width: 100%;
+  height: 35px;
+  background-color: #222;
+  align-items: center;
+  border-bottom: 1px solid #111;
+  box-shadow: 0px 2px 5px #111;
+}
+.header-web-movil .container-icon {
+  width: 25px;
+  height: 25px;
+  margin-left: 10px;
+}
+.header-web-movil .container-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.header-web-movil .container-web-title {
+  width: calc(100% - 40px);
+}
+.header-web-movil .container-web-title h1 {
+  text-align: center;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+body {
+  background-color: #222;
+}
+
+.container-web-movil {
+  height: calc(100vh - 35px);
+  width: 100%;
+  overflow: hidden;
+}
+.container-web-movil .content-view-all-movil {
+  width: 100%;
+  height: calc(100vh - 35px);
+  overflow-y: auto;
+}
+.container-web-movil .content-view-all-movil .container-modules {
+  padding: 5px;
+  margin: 5px;
+  width: calc(100% - 10px);
+  border-bottom: 1px solid #111;
+}
+.container-web-movil .content-view-all-movil .container-modules .form-group {
+  width: 100%;
+  background-color: #333;
+  min-width: 200px;
+  margin: 3px;
+  box-shadow: 0px 2px 5px #222;
+  padding: 5px;
+  border-radius: 2px;
+}
+.container-web-movil .content-view-all-movil .container-modules .form-group input[type=range] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 3px;
+  background: #444;
+  border-radius: 0px;
+  outline: none;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+.container-web-movil .content-view-all-movil .container-modules .form-group label {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+}
+.container-web-movil .content-view-all-movil .container-modules .form-group span {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+}
+.container-web-movil .content-view-all-movil .container-modules .form-group .volume-data-options {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+.container-web-movil .content-view-all-movil .container-modules .form-group .volume-data-options button.icon-volumen {
+  width: 25px;
+  height: 25px;
+  background-color: #333;
+  border-radius: 5px;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.container-web-movil .content-view-all-movil .container-modules .form-group .volume-data-options button.icon-volumen i {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 18px;
+}
+.container-web-movil .content-view-all-movil .container-modules .form-group .volume-data-options button.icon-volumen:hover {
+  background-color: #444;
+}
+.container-web-movil .content-view-all-movil .container-modules .screen-container {
+  display: flex;
+}
+.container-web-movil .content-view-all-movil .container-modules .screen-container button {
+  width: 70px;
+  height: 50px;
+  background-color: transparent;
+  border: none;
+  margin-right: 10px;
+  cursor: pointer;
+}
+.container-web-movil .content-view-all-movil .container-modules .screen-container button img {
+  width: 100%;
+}
+.container-web-movil .content-view-all-movil .container-modules .screen-container button span {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 10px;
+  position: relative;
+  top: -10px;
+}
+.container-web-movil .content-view-all-movil .container-modules .screen-container button:hover {
+  transform: scale(1.1);
+}
+.container-web-movil .content-view-all-movil .container-modules.container-modules-2 {
+  height: 80px;
+}
+.container-web-movil .content-view-all-movil .container-modules.container-modules-3 {
+  display: flex;
+  align-items: center;
+}
+.container-web-movil .content-view-all-movil .container-modules.container-modules-3 .app-container {
+  display: flex;
+}
+.container-web-movil .content-view-all-movil .container-modules.container-modules-3 .app-container button {
+  display: flex;
+  flex-direction: column;
+  width: 50px;
+  height: 45px;
+  background-color: #333;
+  border-radius: 5px;
+  border: none;
+  margin-right: 10px;
+  box-shadow: 0px 2px 5px #111;
+  padding: 5px;
+  cursor: pointer;
+}
+.container-web-movil .content-view-all-movil .container-modules.container-modules-3 .app-container button i {
+  font-size: 20px;
+  color: rgba(255, 255, 255, 0.5);
+}
+.container-web-movil .content-view-all-movil .container-modules.container-modules-3 .app-container button span {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+  position: relative;
+}
+.container-web-movil .content-view-all-movil .container-modules.container-modules-3 .app-container button:hover {
+  background-color: #444;
+}
+.container-web-movil .content-view-all-movil .container-modules.container-modules-4 .btn-add-app-direct {
+  margin-left: 10px;
+  width: 30px;
+  height: 30px;
+  background-color: #337ab7;
+  border-radius: 50%;
+  border: none;
+  box-shadow: 0px 2px 5px #111;
+  color: #fff;
+  font-size: 20px;
+  cursor: pointer;
+}
+.container-web-movil .content-view-all-movil .container-modules.container-modules-4 .btn-add-app-direct:hover {
+  background-color: #337ab7;
+  transform: scale(1.1);
+}
+.container-web-movil .content-view-all-movil .container-modules.container-modules-4 .apps-container {
+  display: flex;
+  flex-wrap: wrap;
+}
+.container-web-movil .content-view-all-movil .container-modules.container-modules-4 .apps-container button {
+  display: flex;
+  flex-direction: column;
+  width: 50px;
+  height: 60px;
+  background-color: transparent;
+  border-radius: 5px;
+  border: none;
+  margin-right: 10px;
+  padding: 5px;
+  cursor: pointer;
+}
+.container-web-movil .content-view-all-movil .container-modules.container-modules-4 .apps-container button i {
+  font-size: 20px;
+  color: rgba(255, 255, 255, 0.5);
+}
+.container-web-movil .content-view-all-movil .container-modules.container-modules-4 .apps-container button span {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+  position: relative;
+}
+.container-web-movil .content-view-all-movil .container-modules.container-modules-4 .apps-container button:hover {
+  transform: scale(1.1);
+}
+
+.btn-teclado-show {
+  position: fixed;
+  bottom: 10px;
+  left: 10px;
+  width: 50px;
+  height: 40px;
+  background-color: #333;
+  border-radius: 5px;
+  border: none;
+  box-shadow: 0px 2px 5px #111;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+}
+.btn-teclado-show i {
+  font-size: 20px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.btn-otion-pc-show {
+  position: fixed;
+  bottom: 10px;
+  right: 10px;
+  background-color: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+}
+.btn-otion-pc-show i {
+  font-size: 30px;
+  color: #d9534f;
+}
+
+.container-option-pc {
+  width: 100%;
+  height: 100%;
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 99999;
+  display: none;
+}
+.container-option-pc .container-option-pc-1 {
+  position: fixed;
+  bottom: 50px;
+  right: 10px;
+  display: flex;
+  flex-direction: column;
+  background-color: #333;
+  border-radius: 5px;
+  box-shadow: 0px 2px 5px #111;
+}
+.container-option-pc .container-option-pc-1 button {
+  padding: 5px;
+  border: none;
+  background-color: #333;
+  cursor: pointer;
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+}
+.container-option-pc .container-option-pc-1 button i {
+  font-size: 20px;
+  color: rgba(255, 255, 255, 0.5);
+}
+.container-option-pc .container-option-pc-1 button span {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-left: 5px;
+}
+.container-option-pc .container-option-pc-1 button:hover {
+  background-color: #444;
+}
+.container-option-pc.active {
+  display: unset;
+}
+
+.select-dir {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 99999;
+  display: none;
+  justify-content: center;
+  padding: 10px;
+  padding-top: 35px;
+}
+.select-dir .container-folders-dir {
+  width: 100%;
+  max-width: 500px;
+  background-color: #333;
+}
+.select-dir .container-folders-dir .header-select-dir {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  background-color: #222;
+  padding: 5px;
+}
+.select-dir .container-folders-dir .header-select-dir button {
+  width: 30px;
+  height: 30px;
+  border: none;
+}
+.select-dir .container-folders-dir .header-select-dir button.btn-return-modal-dir {
+  background-color: #f0ad4e;
+  border-radius: 5px;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.select-dir .container-folders-dir .header-select-dir button.btn-return-modal-dir i {
+  font-size: 20px;
+  color: rgba(255, 255, 255, 0.5);
+}
+.select-dir .container-folders-dir .header-select-dir button.btn-return-modal-dir:hover {
+  background-color: rgb(236.015625, 151.21875, 30.984375);
+}
+.select-dir .container-folders-dir .header-select-dir button.btn-close-modal-dir {
+  background-color: #d9534f;
+  border-radius: 5px;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.select-dir .container-folders-dir .header-select-dir button.btn-close-modal-dir i {
+  font-size: 20px;
+  color: rgba(255, 255, 255, 0.5);
+}
+.select-dir .container-folders-dir .header-select-dir button.btn-close-modal-dir:hover {
+  background-color: rgb(201.4953271028, 48.0841121495, 43.5046728972);
+}
+.select-dir .container-folders-dir .header-select-dir input {
+  background-color: transparent;
+  border: none;
+  width: calc(100% - 70px);
+  outline: none;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  padding: 5px;
+  border-radius: 5px;
+  text-align: center;
+}
+.select-dir .container-folders-dir .body-select-dir {
+  padding: 10px;
+  height: calc(100vh - 35px - 80px);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.select-dir .container-folders-dir .body-select-dir .itm {
+  width: 100%;
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  cursor: pointer;
+  border-radius: 5px;
+  margin-bottom: 5px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+  text-align: left;
+  width: calc(100% - 30px);
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.select-dir .container-folders-dir .body-select-dir .itm .event_folder {
+  width: 100%;
+  padding: 5px;
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+}
+.select-dir .container-folders-dir .body-select-dir .itm:hover {
+  background-color: #444;
+}
+.select-dir .container-folders-dir .body-select-dir .itm img {
+  width: 20px;
+  height: 20px;
+  margin-right: 10px;
+}
+.select-dir.active {
+  display: flex;
+}
+
+.modal-add-app {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 9999;
+  display: none;
+  justify-content: center;
+  padding: 10px;
+  padding-top: 35px;
+}
+.modal-add-app .container-add-app {
+  width: 100%;
+  max-width: 500px;
+  background-color: #333;
+  border-radius: 5px;
+  box-shadow: 0px 2px 5px #111;
+  height: max-content;
+}
+.modal-add-app .container-add-app .header-modal {
+  width: 100%;
+  display: flex;
+  justify-content: flex-end;
+  background-color: #222;
+  padding: 5px;
+}
+.modal-add-app .container-add-app .header-modal button {
+  width: 30px;
+  height: 30px;
+  border-radius: 5px;
+  border: none;
+  cursor: pointer;
+}
+.modal-add-app .container-add-app .header-modal button.btn-close-modal-add-app {
+  background-color: #d9534f;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.modal-add-app .container-add-app .header-modal button.btn-close-modal-add-app i {
+  font-size: 20px;
+  color: rgba(255, 255, 255, 0.5);
+}
+.modal-add-app .container-add-app .header-modal button.btn-close-modal-add-app:hover {
+  background-color: rgb(201.4953271028, 48.0841121495, 43.5046728972);
+}
+.modal-add-app .container-add-app .body-modal {
+  padding: 10px;
+}
+.modal-add-app .container-add-app .body-modal .form-group {
+  margin-bottom: 10px;
+}
+.modal-add-app .container-add-app .body-modal .form-group label {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+}
+.modal-add-app .container-add-app .body-modal .form-group input[type=text],
+.modal-add-app .container-add-app .body-modal .form-group input[type=file],
+.modal-add-app .container-add-app .body-modal .form-group select,
+.modal-add-app .container-add-app .body-modal .form-group button {
+  padding: 10px;
+  width: calc(100% - 20px);
+  background-color: #444;
+  border-radius: 5px;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+  text-align: left;
+}
+.modal-add-app .container-add-app .body-modal .form-group input[type=text]::placeholder,
+.modal-add-app .container-add-app .body-modal .form-group input[type=file]::placeholder,
+.modal-add-app .container-add-app .body-modal .form-group select::placeholder,
+.modal-add-app .container-add-app .body-modal .form-group button::placeholder {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+}
+.modal-add-app .container-add-app .body-modal .form-group.d-none {
+  display: none;
+}
+.modal-add-app .container-add-app .footer-modal {
+  display: flex;
+  justify-content: flex-end;
+  padding: 10px;
+}
+.modal-add-app .container-add-app .footer-modal button {
+  width: 100%;
+  max-width: 100px;
+  height: 40px;
+  margin: 0 5px;
+  background-color: #337ab7;
+  border-radius: 5px;
+  border: none;
+  padding: 10px;
+  cursor: pointer;
+  color: #fff;
+  font-size: 12px;
+}
+.modal-add-app .container-add-app .footer-modal button:hover {
+  background-color: rgb(39.8846153846, 95.4102564103, 143.1153846154);
+}
+.modal-add-app .container-add-app .footer-modal .btn-cancel {
+  background-color: #d9534f;
+}
+.modal-add-app .container-add-app .footer-modal .btn-cancel:hover {
+  background-color: rgb(201.4953271028, 48.0841121495, 43.5046728972);
+}
+.modal-add-app.active {
+  display: flex;
+}
+
+.container-teclados {
+  /*
+  <div class="row-teclado modifiers">
+              <button class="btn btn-modifier" data-modifier="ctrl">Ctrl</button>
+              <button class="btn btn-modifier" data-modifier="alt">Alt</button>
+              <button class="btn btn-modifier" data-modifier="shift">Shift</button>
+              <button class="btn btn-modifier" data-modifier="win">Win</button>
+          </div>
+  */
+  width: 100%;
+  display: none;
+  background-color: #222;
+  padding: 5px;
+  position: fixed;
+  bottom: 50px;
+  left: 0;
+  box-shadow: 2px 2px 5px #111;
+  z-index: 9999;
+}
+.container-teclados .btn-modifier {
+  min-width: 64px;
+  height: 42px;
+  margin: 4px;
+  padding: 0 12px;
+  border-radius: 10px;
+  background-color: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  -ms-user-select: none;
+  -webkit-user-select: none;
+  user-select: none;
+  transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+.container-teclados .btn-modifier:hover {
+  background-color: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+.container-teclados .btn-modifier.active {
+  background-color: #337ab7;
+  border-color: rgb(79.0384615385, 147.3076923077, 205.9615384615);
+  color: #fff;
+  box-shadow: 0 3px 12px rgba(51, 122, 183, 0.4);
+}
+.container-teclados .teclado {
+  width: 100%;
+  height: 100%;
+}
+.container-teclados .teclado .row-teclado {
+  display: flex;
+  justify-content: center;
+  margin-top: 5px;
+}
+.container-teclados .teclado .row-teclado .btn-teclado,
+.container-teclados .teclado .row-teclado .btn-teclado-cod {
+  width: 40px;
+  height: 45px;
+  background-color: #333;
+  border: none;
+  border-radius: 8px;
+  margin: 2px;
+  color: #fff;
+  font-size: 20px;
+  -ms-user-select: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.container-teclados .teclado .row-teclado .btn-teclado.space,
+.container-teclados .teclado .row-teclado .btn-teclado-cod.space {
+  width: 60%;
+}
+.container-teclados .teclado .row-teclado .btn-teclado.enter,
+.container-teclados .teclado .row-teclado .btn-teclado-cod.enter {
+  width: 60px;
+  background-color: #c2eef1;
+  color: #000;
+  border-radius: 45%;
+}
+.container-teclados .teclado .row-teclado .btn-teclado.backspace,
+.container-teclados .teclado .row-teclado .btn-teclado-cod.backspace {
+  width: 70px;
+}
+.container-teclados .teclado .row-teclado .btn-teclado:hover,
+.container-teclados .teclado .row-teclado .btn-teclado-cod:hover {
+  background-color: #555;
+}
+.container-teclados .teclado .row-teclado .btn-only-number {
+  width: 40px;
+  height: 45px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background-color: #333;
+  border: none;
+  border-radius: 8px;
+  margin: 2px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: bold;
+}
+.container-teclados .teclado .row-teclado .btn-only-number:hover {
+  background-color: #555;
+}
+.container-teclados .teclado .row-teclado .btn-shift,
+.container-teclados .teclado .row-teclado .btn-special {
+  width: 60px;
+  height: 45px;
+  background-color: #333;
+  border: none;
+  border-radius: 8px;
+  margin: 2px;
+  color: #fff;
+  font-size: 20px;
+}
+.container-teclados .teclado .row-teclado .btn-shift:hover,
+.container-teclados .teclado .row-teclado .btn-special:hover {
+  background-color: #555;
+}
+.container-teclados .teclado .row-teclado .btn-shift.active,
+.container-teclados .teclado .row-teclado .btn-special.active {
+  background-color: #c2eef1;
+  color: #000;
+}
+.container-teclados .teclado .row-teclado .btn-shift.active.modifiers,
+.container-teclados .teclado .row-teclado .btn-special.active.modifiers {
+  justify-content: center;
+}
+.container-teclados .teclado .row-teclado .btn-shift.active.modifiers .btn-modifier,
+.container-teclados .teclado .row-teclado .btn-special.active.modifiers .btn-modifier {
+  min-width: 64px;
+  height: 42px;
+  margin: 4px;
+  padding: 0 12px;
+  border-radius: 10px;
+  background-color: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  -ms-user-select: none;
+  -webkit-user-select: none;
+  user-select: none;
+  transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+.container-teclados .teclado .row-teclado .btn-shift.active.modifiers .btn-modifier:hover,
+.container-teclados .teclado .row-teclado .btn-special.active.modifiers .btn-modifier:hover {
+  background-color: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+.container-teclados .teclado .row-teclado .btn-shift.active.modifiers .btn-modifier.active,
+.container-teclados .teclado .row-teclado .btn-special.active.modifiers .btn-modifier.active {
+  background-color: #337ab7;
+  border-color: rgb(79.0384615385, 147.3076923077, 205.9615384615);
+  color: #fff;
+  box-shadow: 0 3px 12px rgba(51, 122, 183, 0.4);
+}
+.container-teclados .teclado .row-teclado .btn-number,
+.container-teclados .teclado .row-teclado .btn-abc,
+.container-teclados .teclado .row-teclado .btn-special-microsoft,
+.container-teclados .teclado .row-teclado .btn-special-co2 {
+  width: 70px;
+  height: 45px;
+  background-color: #c2eef1;
+  border: none;
+  border-radius: 45%;
+  margin: 2px;
+  color: #000;
+  font-size: 15px;
+}
+.container-teclados .teclado .row-teclado .btn-number:hover,
+.container-teclados .teclado .row-teclado .btn-abc:hover,
+.container-teclados .teclado .row-teclado .btn-special-microsoft:hover,
+.container-teclados .teclado .row-teclado .btn-special-co2:hover {
+  background-color: #555;
+}
+.container-teclados .teclado .row-special {
+  height: 50px;
+  width: 100%;
+  color: #fff;
+  display: flex;
+  align-items: flex-end;
+  font-size: 30px;
+}
+.container-teclados .teclado .row-special button {
+  margin-left: 10px;
+  margin-bottom: 5px;
+  border: none;
+  background-color: transparent;
+  color: #fff;
+}
+.container-teclados .teclado .teclado-numerico {
+  display: flex;
+  flex-direction: column;
+}
+.container-teclados .teclado .teclado-numerico .content-top {
+  display: flex;
+}
+.container-teclados .teclado .teclado-numerico .content-top .content-left {
+  display: flex;
+  flex-direction: column;
+  width: 50px;
+  height: 160px;
+  overflow-y: auto;
+  background-color: #333;
+  border-radius: 8px;
+  padding: 5px;
+  margin-top: 5px;
+}
+.container-teclados .teclado .teclado-numerico .content-top .content-left button {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 40px;
+  height: 40px;
+  background-color: transparent;
+  border: none;
+  border-radius: 8px;
+  padding: 10px;
+  color: #fff;
+  font-size: 20px;
+}
+.container-teclados .teclado .teclado-numerico .content-top .content-left button:hover {
+  background-color: #555;
+}
+.container-teclados .teclado .teclado-numerico .content-top .content-right {
+  display: flex;
+  flex-direction: column;
+  width: 50px;
+  height: 160px;
+  overflow-y: auto;
+  border-radius: 8px;
+  margin-top: 2px;
+}
+.container-teclados .teclado .teclado-numerico .content-top .content-right button {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 50px;
+  height: 61px;
+  background-color: #333;
+  border: none;
+  border-radius: 8px;
+  padding: 10px;
+  color: #fff;
+  font-size: 20px;
+  margin-top: 5px;
+}
+.container-teclados .teclado .teclado-numerico .content-top .content-right button:hover {
+  background-color: #555;
+}
+.container-teclados .teclado .teclado-numerico .content-top .content-center {
+  padding: 5px;
+  margin-top: 0;
+  border-radius: 8px;
+}
+.container-teclados .teclado .teclado-numerico .content-top .content-center .row-teclado {
+  margin: 0;
+}
+.container-teclados .teclado .teclado-numerico .content-top .content-center .row-teclado button {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 75px;
+  height: 50px;
+  background-color: #333;
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+}
+.container-teclados .teclado .teclado-numerico .content-top .content-center .row-teclado button:hover {
+  background-color: #555;
+}
+.container-teclados .teclado .teclado-numerico .content-bottom {
+  width: 100%;
+  display: flex;
+}
+.container-teclados .teclado .teclado-numerico .content-bottom .btn-abc {
+  width: 50px;
+  height: 45px;
+  background-color: #c2eef1;
+  border: none;
+  border-radius: 40%;
+  margin: 2px;
+  color: #000;
+  font-size: 15px;
+}
+.container-teclados .teclado .teclado-numerico .content-bottom .btn-abc:hover {
+  background-color: #555;
+}
+.container-teclados .teclado .teclado-numerico .content-bottom .btn-teclado {
+  width: 40px;
+  height: 45px;
+  background-color: #333;
+  border: none;
+  border-radius: 8px;
+  margin: 2px;
+  color: #fff;
+  font-size: 20px;
+}
+.container-teclados .teclado .teclado-numerico .content-bottom .btn-teclado.btn-cero {
+  width: 85px;
+}
+.container-teclados .teclado .teclado-numerico .content-bottom .btn-teclado.enter {
+  width: 57px;
+  background-color: #c2eef1;
+  color: #000;
+  border-radius: 30%;
+}
+.container-teclados .teclado .teclado-numerico .content-bottom .btn-teclado:hover {
+  background-color: #555;
+}
+.container-teclados .teclado .teclado-numerico .content-bottom .btn-number {
+  width: 45px;
+  height: 45px;
+  background-color: #333;
+  border: none;
+  border-radius: 8px;
+  margin: 2px;
+  color: #fff;
+  font-size: 15px;
+}
+.container-teclados .teclado .teclado-numerico .content-bottom .btn-number:hover {
+  background-color: #555;
+}
+.container-teclados .teclado .teclado-microsoft {
+  display: flex;
+}
+.container-teclados .teclado .teclado-microsoft .mic-left .row-teclado {
+  display: flex;
+  flex-direction: column;
+}
+.container-teclados .teclado .teclado-microsoft .mic-left .row-teclado button {
+  width: 50px;
+  height: 45px;
+  background-color: #c2eef1;
+  border: none;
+  border-radius: 40%;
+  margin: 2px;
+  color: #000;
+  font-size: 15px;
+}
+.container-teclados .teclado .teclado-microsoft .mic-left .row-teclado button:hover {
+  background-color: #555;
+}
+.container-teclados .teclado .teclado-microsoft .mic-center .row-teclado {
+  margin-left: 8px;
+  margin-right: 8px;
+}
+.container-teclados .teclado .teclado-microsoft .mic-center .row-teclado button {
+  width: 70px;
+  height: 60px;
+  font-size: 18px;
+}
+.container-teclados .teclado .teclado-microsoft .mic-right .row-teclado {
+  display: flex;
+  flex-direction: column;
+}
+.container-teclados .teclado .teclado-microsoft .mic-right .row-teclado button {
+  width: 50px;
+  height: 45px;
+  background-color: #c2eef1;
+  border: none;
+  border-radius: 40%;
+  margin: 2px;
+  color: #000;
+  font-size: 15px;
+}
+.container-teclados .teclado .teclado-microsoft .mic-right .row-teclado button:hover {
+  background-color: #555;
+}
+.container-teclados .teclado .teclado-bo2 .row-teclado.first-line .btn-teclado-cod,
+.container-teclados .teclado .teclado-bo2 .row-teclado.first-line .btn-teclado {
+  width: 110px;
+  height: 90px;
+}
+.container-teclados.active {
+  display: flex;
+}
+
+.loadding {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 999999;
+  display: none;
+  justify-content: center;
+  align-items: center;
+}
+.loadding .circle {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background-color: transparent;
+  border: 5px solid #337ab7;
+  border-top: 5px solid #fff;
+  animation: spin 1s linear infinite;
+}
+.loadding .circle .dot1,
+.loadding .circle .dot2 {
+  width: 10px;
+  height: 10px;
+  background-color: #337ab7;
+  border-radius: 50%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  animation: bounce 1s infinite alternate;
+}
+.loadding .circle .dot2 {
+  animation-delay: 0.5s;
+}
+.loadding.active {
+  display: flex;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}

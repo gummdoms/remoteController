@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="./node_modules/normalize.css/normalize.css">
+    <link rel="stylesheet" href="./node_modules/bootstrap-icons/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="./static/css/index.css">
+    <link rel="stylesheet" href="./node_modules/sweetalert2/dist/sweetalert2.css">
+    <script src="./node_modules/jquery/dist/jquery.min.js"></script>
+    <script src="./node_modules/sweetalert2/dist/sweetalert2.all.js"></script>
+    <title>Remote Service</title>
+</head>
+
+<body>
+    <header class="header">
+        <div class="container-buttons-win">
+            <button class="close-window" title="Cerrar">
+                <i class="bi bi-x-lg"></i>
+            </button>
+            <button class="minimize-window" title="Minimizar">
+                <i class="bi bi-dash-lg"></i>
+            </button>
+            <button class="maximize-window" title="Maximizar">
+                <i class="bi bi-square"></i>
+            </button>
+        </div>
+    </header>
+    <main class="main">
+        <div class="content">
+            <h1>
+                Servicio remoto iniciado
+            </h1>
+            <button class="exitApp">
+                <i class="bi bi-power"></i>
+                Salir del servicio
+            </button>
+        </div>
+        <div class="container-mp3">
+            <audio src="./static/audio/volumen.mp3" id="audio" controls></audio>
+        </div>
+    </main>
+    <script src="./render.js"></script>
+</body>
+
+</html>
