@@ -10,9 +10,9 @@
     },
     "gypfile": true,
     "dependencies": {
-        "node-addon-api": "^8.0.0"
+        "node-addon-api": "^8.5.0"
     },
     "devDependencies": {
-        "node-gyp": "^10.0.0"
+        "node-gyp": "^11.4.2"
     }
 }

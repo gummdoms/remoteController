@@ -9,6 +9,20 @@ const MODIFIERS_ROW = `
 
 function teclado_principal() {
     return `<div class="row-teclado">
+                <button class="btn btn-teclado" data-key="F1">F1</button>
+                <button class="btn btn-teclado" data-key="F2">F2</button>
+                <button class="btn btn-teclado" data-key="F3">F3</button>
+                <button class="btn btn-teclado" data-key="F4">F4</button>
+                <button class="btn btn-teclado" data-key="F5">F5</button>
+                <button class="btn btn-teclado" data-key="F6">F6</button>
+                <button class="btn btn-teclado" data-key="F7">F7</button>
+                <button class="btn btn-teclado" data-key="F8">F8</button>
+                <button class="btn btn-teclado" data-key="F9">F9</button>
+                <button class="btn btn-teclado" data-key="F10">F10</button>
+                <button class="btn btn-teclado" data-key="F11">F11</button>
+                <button class="btn btn-teclado" data-key="F12">F12</button>
+            </div>
+            <div class="row-teclado">
                 <button class="btn btn-teclado" data-key="q">q</button>
                 <button class="btn btn-teclado" data-key="w">w</button>
                 <button class="btn btn-teclado" data-key="e">e</button>
@@ -64,8 +78,21 @@ function teclado_principal() {
             </div>`;
 }
 function teclado_mayus() {
-    return `
-    <div class="row-teclado">
+    return `<div class="row-teclado">
+                <button class="btn btn-teclado" data-key="F1">F1</button>
+                <button class="btn btn-teclado" data-key="F2">F2</button>
+                <button class="btn btn-teclado" data-key="F3">F3</button>
+                <button class="btn btn-teclado" data-key="F4">F4</button>
+                <button class="btn btn-teclado" data-key="F5">F5</button>
+                <button class="btn btn-teclado" data-key="F6">F6</button>
+                <button class="btn btn-teclado" data-key="F7">F7</button>
+                <button class="btn btn-teclado" data-key="F8">F8</button>
+                <button class="btn btn-teclado" data-key="F9">F9</button>
+                <button class="btn btn-teclado" data-key="F10">F10</button>
+                <button class="btn btn-teclado" data-key="F11">F11</button>
+                <button class="btn btn-teclado" data-key="F12">F12</button>
+            </div>
+            <div class="row-teclado">
                 <button class="btn btn-teclado" data-key="Q">Q</button>
                 <button class="btn btn-teclado" data-key="W">W</button>
                 <button class="btn btn-teclado" data-key="E">E</button>

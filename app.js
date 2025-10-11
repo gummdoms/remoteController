@@ -23,22 +23,23 @@ try {
     console.warn('Para usar el módulo nativo, ejecute: cd modules && npm install');
     nativeInput = null;
 }
-const resolvedPath = () => {
-    if (app.isPackaged) {
-        return path.join(process.resourcesPath, 'apps.db');
-    } else {
-        return path.join(__dirname, 'apps.db');
+const userDataPath = app.getPath('userData');
+
+function ensureDirectory(dirPath) {
+    if (!fs.existsSync(dirPath)) {
+        fs.mkdirSync(dirPath, { recursive: true });
     }
 }
 
+const resolvedPath = () => path.join(userDataPath, 'apps.db');
+
+const uploadTempDir = path.join(userDataPath, 'uploads');
+ensureDirectory(uploadTempDir);
+
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        const uploadPath = path.join(__dirname, 'static', 'img', 'apps');
-        // Crear la carpeta si no existe
-        if (!fs.existsSync(uploadPath)) {
-            fs.mkdirSync(uploadPath, { recursive: true });
-        }
-        cb(null, uploadPath);
+        // Guardamos temporalmente en la carpeta de datos del usuario para evitar rutas de solo lectura al empaquetar
+        cb(null, uploadTempDir);
     },
     filename: (req, file, cb) => {
         const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1E9)}`;
@@ -51,6 +52,7 @@ const upload = multer({ storage: storage });
 
 
 const dbPath = resolvedPath();
+ensureDirectory(path.dirname(dbPath));
 const db = new connApps(dbPath);
 
 const queue = asyncQueue.queue(async (task, callback) => {

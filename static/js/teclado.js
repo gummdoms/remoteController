@@ -24,7 +24,19 @@ $(document).ready(function () {
         $('.btn-modifier').removeClass('active');
     }
 
-    function sendCharacterKey(key) {
+    function toKeyString(value) {
+        if (value === undefined || value === null) {
+            return undefined;
+        }
+        return typeof value === 'string' ? value : value.toString();
+    }
+
+    function sendCharacterKey(rawKey) {
+        const key = toKeyString(rawKey);
+        if (!key) {
+            return;
+        }
+
         if (activeModifiers.size) {
             const combo = Array.from(activeModifiers);
             combo.push(key);
@@ -73,7 +85,7 @@ $(document).ready(function () {
             event.preventDefault();
             return;
         }
-        const key = $button.data('key');
+        const key = toKeyString($button.data('key'));
         if (key === undefined) {
             return;
         }
@@ -83,7 +95,7 @@ $(document).ready(function () {
     $(document).on('pointerdown', '.btn-teclado', function (event) {
         event.preventDefault();
         const $button = $(this);
-        const key = $button.data('key');
+        const key = toKeyString($button.data('key'));
         if (key === undefined || $button.data('hold') === false || $button.data('holdActive')) {
             return;
         }
@@ -124,7 +136,7 @@ $(document).ready(function () {
     }
 
     $(document).on('click', '.btn-teclado-cod', async function () {
-        const key = $(this).data('key');
+        const key = toKeyString($(this).data('key'));
         if (!key) {
             return;
         }
