@@ -15,6 +15,31 @@
           "ExceptionHandling": 1
         }
       }
+    },
+    {
+      "target_name": "alert_controller",
+      "type": "executable",
+      "sources": [ "alert-controller.cc" ],
+      "defines": [
+        "UNICODE",
+        "_UNICODE",
+        "_WIN32_WINNT=0x0601"
+      ],
+      "libraries": [
+        "gdiplus.lib",
+        "dwmapi.lib",
+        "shcore.lib"
+      ],
+      "msvs_settings": {
+        "VCCLCompilerTool": {
+          "ExceptionHandling": 1,
+          "AdditionalOptions": [ "/std:c++17" ]
+        },
+        "VCLinkerTool": {
+          "SubSystem": 2,
+          "EntryPointSymbol": "wWinMainCRTStartup"
+        }
+      }
     }
   ]
 }

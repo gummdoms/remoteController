@@ -25,6 +25,8 @@ namespace
         case VK_NUMLOCK:
         case VK_RCONTROL:
         case VK_RMENU:
+        case VK_LWIN:
+        case VK_RWIN:
             return true;
         default:
             return false;
@@ -146,7 +148,7 @@ namespace
     }
 
     const std::map<std::string, WORD> SPECIAL_KEY_MAP = {
-        {"backspace", VK_BACK}, {"enter", VK_RETURN}, {"return", VK_RETURN}, {"space", VK_SPACE}, {"tab", VK_TAB}, {"esc", VK_ESCAPE}, {"escape", VK_ESCAPE}, {"delete", VK_DELETE}, {"del", VK_DELETE}, {"insert", VK_INSERT}, {"home", VK_HOME}, {"end", VK_END}, {"pageup", VK_PRIOR}, {"pagedown", VK_NEXT}, {"up", VK_UP}, {"down", VK_DOWN}, {"left", VK_LEFT}, {"right", VK_RIGHT}, {"capslock", VK_CAPITAL}, {"numlock", VK_NUMLOCK}, {"scrolllock", VK_SCROLL}, {"printscreen", VK_SNAPSHOT}, {"pause", VK_PAUSE}, {"f1", VK_F1}, {"f2", VK_F2}, {"f3", VK_F3}, {"f4", VK_F4}, {"f5", VK_F5}, {"f6", VK_F6}, {"f7", VK_F7}, {"f8", VK_F8}, {"f9", VK_F9}, {"f10", VK_F10}, {"f11", VK_F11}, {"f12", VK_F12}, {"media_play", VK_MEDIA_PLAY_PAUSE}, {"media_stop", VK_MEDIA_STOP}, {"media_next", VK_MEDIA_NEXT_TRACK}, {"media_prev", VK_MEDIA_PREV_TRACK}, {"volume_up", VK_VOLUME_UP}, {"volume_down", VK_VOLUME_DOWN}, {"volume_mute", VK_VOLUME_MUTE}, {"lwin", VK_LWIN}, {"rwin", VK_RWIN}, {"win", VK_LWIN}, {"windows", VK_LWIN}, {"super", VK_LWIN}, {"meta", VK_LWIN}, {"ctrl", VK_CONTROL}, {"control", VK_CONTROL}, {"lctrl", VK_LCONTROL}, {"rctrl", VK_RCONTROL}, {"alt", VK_MENU}, {"lalt", VK_LMENU}, {"ralt", VK_RMENU}, {"shift", VK_SHIFT}, {"lshift", VK_LSHIFT}, {"rshift", VK_RSHIFT}, {"mayus", VK_SHIFT}};
+        {"backspace", VK_BACK}, {"enter", VK_RETURN}, {"return", VK_RETURN}, {"space", VK_SPACE}, {"tab", VK_TAB}, {"esc", VK_ESCAPE}, {"escape", VK_ESCAPE}, {"delete", VK_DELETE}, {"del", VK_DELETE}, {"insert", VK_INSERT}, {"home", VK_HOME}, {"end", VK_END}, {"pageup", VK_PRIOR}, {"pagedown", VK_NEXT}, {"up", VK_UP}, {"down", VK_DOWN}, {"left", VK_LEFT}, {"right", VK_RIGHT}, {"capslock", VK_CAPITAL}, {"numlock", VK_NUMLOCK}, {"scrolllock", VK_SCROLL}, {"printscreen", VK_SNAPSHOT}, {"pause", VK_PAUSE}, {"pausebreak", VK_PAUSE}, {"f1", VK_F1}, {"f2", VK_F2}, {"f3", VK_F3}, {"f4", VK_F4}, {"f5", VK_F5}, {"f6", VK_F6}, {"f7", VK_F7}, {"f8", VK_F8}, {"f9", VK_F9}, {"f10", VK_F10}, {"f11", VK_F11}, {"f12", VK_F12}, {"media_play", VK_MEDIA_PLAY_PAUSE}, {"media_stop", VK_MEDIA_STOP}, {"media_next", VK_MEDIA_NEXT_TRACK}, {"media_prev", VK_MEDIA_PREV_TRACK}, {"volume_up", VK_VOLUME_UP}, {"volume_down", VK_VOLUME_DOWN}, {"volume_mute", VK_VOLUME_MUTE}, {"lwin", VK_LWIN}, {"rwin", VK_RWIN}, {"win", VK_LWIN}, {"windows", VK_LWIN}, {"super", VK_LWIN}, {"meta", VK_LWIN}, {"ctrl", VK_CONTROL}, {"control", VK_CONTROL}, {"lctrl", VK_LCONTROL}, {"rctrl", VK_RCONTROL}, {"alt", VK_MENU}, {"lalt", VK_LMENU}, {"ralt", VK_RMENU}, {"shift", VK_SHIFT}, {"lshift", VK_LSHIFT}, {"rshift", VK_RSHIFT}, {"mayus", VK_SHIFT}};
 }
 
 Napi::Value MoveMouseRelative(const Napi::CallbackInfo &info)

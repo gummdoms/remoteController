@@ -33,7 +33,7 @@
                     <input type="range" class="form-control-range" id="volumen" min="0" max="100" step="1">
                     <div class="volume-data-options">
                         <span class="text-quantity-volumen">50</span>
-                        <button class="icon-volumen">
+                        <button class="icon-volumen" title="Silenciar/Activar sonido">
                             <i class="bi bi-volume-mute"></i>
                         </button>
                     </div>
@@ -78,10 +78,15 @@
                         <i class="bi bi-eye"></i>
                         <span class="text-pc">Mostrar</span>
                     </button>
+                    <!-- boton para programar apagdo -->
+                    <button class="btn btn-primary btn-pc" id="app-programar-apagado" title="Programar apagado">
+                        <i class="bi bi-clock"></i>
+                        <span class="text-pc">Programar</span>
+                    </button>
                 </div>
             </section>
             <section class="container-modules container-modules-4">
-                <button class="btn-add-app-direct">
+                <button class="btn-add-app-direct" title="Agregar aplicación">
                     <i class="bi bi-plus"></i>
                 </button>
                 <div class="apps-container">
@@ -102,7 +107,7 @@
             <button class="btn-touchpad-hold" title="Mantener Click Izquierdo">
                 <i class="bi bi-hand-index-thumb"></i>
             </button>
-            <button class="btn-touchpad-close">
+            <button class="btn-touchpad-close" title="Cerrar Touchpad">
                 <i class="bi bi-x"></i>
             </button>
         </div>
@@ -128,11 +133,11 @@
         </div>
     </aside>
 
-    <button class="btn-teclado-show">
+    <button class="btn-teclado-show" title="Teclado Virtual">
         <i class="bi bi-keyboard"></i>
     </button>
 
-    <button class="btn-touchpad-show">
+    <button class="btn-touchpad-show" title="Touchpad Virtual">
         <i class="bi bi-cursor"></i>
     </button>
     <aside class="container-option-pc">
@@ -155,19 +160,19 @@
             </button>
         </div>
     </aside>
-    <button class="btn-otion-pc-show">
+    <button class="btn-otion-pc-show" title="Opciones de energía">
         <i class="bi bi-power"></i>
     </button>
 
     <aside class="select-dir">
         <div class="container-folders-dir">
             <div class="header-modal header-select-dir">
-                <button class="btn-return-modal-dir" id="return-modal-dir">
+                <button class="btn-return-modal-dir" id="return-modal-dir" title="Regresar">
                     <i class="bi bi-arrow-left"></i>
                 </button>
                 <input type="text" id="path-selected" readonly placeholder="No ha seleccionado archivo"
                     class="form-control">
-                <button class="btn-close-modal-dir" id="close-modal-dir">
+                <button class="btn-close-modal-dir" id="close-modal-dir" title="Cerrar">
                     <i class="bi bi-x"></i>
                 </button>
             </div>
@@ -179,7 +184,7 @@
     <aside class="modal-add-app">
         <div class="container-add-app">
             <div class="header-modal">
-                <button class="btn-close-modal-add-app" id="close-modal-add-app">
+                <button class="btn-close-modal-add-app" id="close-modal-add-app" title="Cerrar">
                     <i class="bi bi-x"></i>
                 </button>
             </div>
@@ -216,6 +221,27 @@
             </div>
         </div>
     </aside>
+    <aside class="modal-power-off">
+        <!-- modal para seleccionar la hora se va a apagar -->
+        <div class="container-power-off">
+            <div class="header-modal header-power-off">
+                <button class="btn-close-modal-power-off" id="close-modal-power-off" title="Cerrar">
+                    <i class="bi bi-x"></i>
+                </button>
+            </div>
+            <div class="body-modal body-power-off">
+                <div class="form-group">
+                    <label for="time-power-off">Selecciona la hora para apagar el PC</label>
+                    <input type="time" id="time-power-off" class="form-control">
+                </div>
+            </div>
+            <div class="footer-modal footer-power-off">
+                <button class="btn btn-primary btn-set-power-off" id="set-power-off">Programar Apagado</button>
+                <button class="btn btn-primary btn-cancel-power-off" id="cancel-power-off">Cancelar</button>
+            </div>
+        </div>
+        <div class="overlay"></div>
+    </aside>
     <div class="loadding">
         <div class="circle">
             <div class="dot1"></div>
@@ -229,6 +255,7 @@
     <script src="/static/js/teclado.js"></script>
     <script src="/static/js/index.js"></script>
     <script src="/static/js/controller_app.js"></script>
+    <script src="/static/js/powerOff.js"></script>
 
 </body>
 

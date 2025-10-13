@@ -1,5 +1,6 @@
 @import 'const';
 @import 'touchpad';
+@import 'modalPowerOff';
 
 .header-web-movil {
     display: flex;
@@ -183,6 +184,29 @@ body {
 
                         &:hover {
                             background-color: $gray-444;
+                        }
+
+                        &#app-programar-apagado {
+                            width: 60px;
+                            background-color: $danger;
+                            color: $white;
+                            font-weight: bold;
+                            box-shadow: 0px 2px 5px darken($danger, 10%);
+
+
+                            &.active {
+                                background-color: darken($danger, 10%);
+                            }
+
+                            &.is-scheduled {
+                                background: linear-gradient(135deg, darken($warning, 5%), $warning);
+                                color: $black;
+                                box-shadow: 0px 4px 12px rgba(240, 173, 78, 0.45);
+
+                                i {
+                                    color: inherit;
+                                }
+                            }
                         }
                     }
                 }
@@ -618,7 +642,7 @@ body {
     */
 
     .btn-modifier {
-        min-width: 64px;
+        //min-width: 64px;
         height: 42px;
         margin: 4px;
         padding: 0 12px;
@@ -647,6 +671,28 @@ body {
             border-color: lighten($primary, 10%);
             color: $white;
             box-shadow: 0 3px 12px rgba($primary, 0.4);
+        }
+    }
+
+    .btn-f {
+        background-color: #c2eef1;
+        border: none;
+        border-radius: 35%;
+        margin: 2px;
+        color: #000;
+        font-size: 15px;
+        width: 40px;
+        height: 45px;
+        cursor: pointer;
+        -ms-user-select: none;
+        -webkit-user-select: none;
+        user-select: none;
+        transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+
+        &:hover {
+            background-color: #555;
+            color: #fff;
+            box-shadow: 0 2px 8px rgba($black, 0.25);
         }
     }
 
@@ -702,6 +748,11 @@ body {
 
                 &:hover {
                     background-color: #555;
+                }
+
+                &.special-keyboard {
+                    font-size: 14px;
+                    width: 55px;
                 }
 
             }
@@ -805,7 +856,7 @@ body {
         }
 
         .row-special {
-            height: 50px;
+            height: 15px;
             width: 100%;
             color: #fff;
             display: flex;

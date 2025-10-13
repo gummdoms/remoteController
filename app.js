@@ -5,13 +5,201 @@ const ddcci = require("@hensm/ddcci");
 //const audio = require('win-audio').speaker;
 const loudness = require('loudness');
 const path = require('path');
-const { exec } = require('child_process');
+const { exec, execFile } = require('child_process');
 const asyncQueue = require('async'); // Para manejar la cola de tareas
 const fs = require('fs');
 const robot = require('robotjs');
 const cors = require('cors');
 const multer = require('multer');
 const connApps = require('./classes/Apps.js');
+
+const ALERT_THRESHOLD_MS = 5 * 60 * 1000;
+let scheduledShutdown = null;
+let scheduledShutdownTimer = null;
+let scheduledAlertTimeout = null;
+let alertProcess = null;
+
+function clearScheduledAlert() {
+    if (scheduledAlertTimeout) {
+        clearTimeout(scheduledAlertTimeout);
+        scheduledAlertTimeout = null;
+    }
+
+    if (alertProcess) {
+        try {
+            alertProcess.kill();
+        } catch (error) {
+            console.warn('No se pudo finalizar el proceso de alerta:', error.message);
+        }
+        alertProcess = null;
+    }
+}
+
+function clearScheduledShutdown() {
+    if (scheduledShutdownTimer) {
+        clearTimeout(scheduledShutdownTimer);
+        scheduledShutdownTimer = null;
+    }
+    clearScheduledAlert();
+    const hadSchedule = Boolean(scheduledShutdown);
+    scheduledShutdown = null;
+    return hadSchedule;
+}
+
+function formatTimeLabel(date) {
+    try {
+        return new Intl.DateTimeFormat('es-ES', {
+            hour: '2-digit',
+            minute: '2-digit'
+        }).format(date);
+    } catch (error) {
+        const hours = date.getHours().toString().padStart(2, '0');
+        const minutes = date.getMinutes().toString().padStart(2, '0');
+        return `${hours}:${minutes}`;
+    }
+}
+
+function launchNativeAlert(primaryLine, secondaryLine, displaySeconds = 25) {
+    if (!nativeInput || !nativeInput.alertExecutable) {
+        console.warn('No se encontró el ejecutable de alerta nativa.');
+        return;
+    }
+
+    const executablePath = nativeInput.alertExecutable;
+    if (!fs.existsSync(executablePath)) {
+        console.warn('El ejecutable de alerta no está disponible en:', executablePath);
+        return;
+    }
+
+    try {
+        if (alertProcess) {
+            alertProcess.kill();
+            alertProcess = null;
+        }
+
+        alertProcess = execFile(
+            executablePath,
+            [primaryLine, secondaryLine, String(displaySeconds)],
+            { windowsHide: true },
+            (error) => {
+                if (error && !error.killed) {
+                    console.error('Error al mostrar la alerta de apagado:', error.message);
+                }
+            }
+        );
+
+        if (alertProcess && typeof alertProcess.unref === 'function') {
+            alertProcess.unref();
+        }
+
+        if (alertProcess) {
+            alertProcess.once('exit', () => {
+                alertProcess = null;
+            });
+        }
+    } catch (error) {
+        console.error('Error inesperado al lanzar la alerta de apagado:', error.message);
+    }
+}
+
+function triggerShutdownAlert(targetDate) {
+    const remainingMs = Math.max(0, targetDate.getTime() - Date.now());
+    const minutesLeft = Math.max(0, Math.ceil(remainingMs / 60000));
+
+    let primaryLine = 'Apagado inminente';
+    if (minutesLeft > 1) {
+        primaryLine = `Apagado en ${minutesLeft} minutos`;
+    } else if (minutesLeft === 1) {
+        primaryLine = 'Apagado en 1 minuto';
+    }
+
+    const secondaryLine = `El equipo se apagará a las ${formatTimeLabel(targetDate)}.`;
+
+    const displaySeconds = Math.min(45, Math.max(20, minutesLeft * 10 || 30));
+    launchNativeAlert(primaryLine, secondaryLine, displaySeconds);
+}
+
+function scheduleAlertForShutdown(targetDate) {
+    clearScheduledAlert();
+
+    if (!nativeInput || !nativeInput.alertExecutable) {
+        return;
+    }
+
+    const delay = targetDate.getTime() - Date.now();
+    if (delay <= 0) {
+        return;
+    }
+
+    const trigger = () => triggerShutdownAlert(targetDate);
+
+    if (delay <= ALERT_THRESHOLD_MS) {
+        trigger();
+        return;
+    }
+
+    scheduledAlertTimeout = setTimeout(trigger, delay - ALERT_THRESHOLD_MS);
+}
+
+function scheduleSystemShutdown(targetDate) {
+    const now = Date.now();
+    const targetTs = targetDate.getTime();
+    const delay = targetTs - now;
+
+    if (Number.isNaN(targetTs) || delay <= 0) {
+        throw new Error('La hora seleccionada ya pasó');
+    }
+
+    clearScheduledShutdown();
+
+    scheduledShutdown = {
+        createdAt: new Date(now).toISOString(),
+        target: targetDate.toISOString()
+    };
+
+    scheduleAlertForShutdown(targetDate);
+
+    scheduledShutdownTimer = setTimeout(() => {
+        console.log('Ejecutando apagado programado');
+        exec('shutdown /s /t 0', (error, stdout, stderr) => {
+            if (error) {
+                console.error('Error al ejecutar apagado programado:', error);
+            }
+            if (stderr) {
+                console.error('stderr apagado programado:', stderr);
+            }
+            if (stdout) {
+                console.log('stdout apagado programado:', stdout);
+            }
+        });
+        clearScheduledShutdown();
+    }, delay);
+}
+
+function resolveTargetDateFromTimeString(timeString) {
+    if (typeof timeString !== 'string') {
+        return null;
+    }
+
+    const match = timeString.trim().match(/^([01]?\d|2[0-3]):([0-5]\d)$/);
+    if (!match) {
+        return null;
+    }
+
+    const hours = parseInt(match[1], 10);
+    const minutes = parseInt(match[2], 10);
+
+    const now = new Date();
+    const target = new Date(now);
+    target.setSeconds(0, 0);
+    target.setHours(hours, minutes, 0, 0);
+
+    if (target.getTime() <= now.getTime()) {
+        target.setDate(target.getDate() + 1);
+    }
+
+    return target;
+}
 
 // Importar módulo nativo de control de entradas (mouse/teclado)
 let nativeInput;
@@ -260,6 +448,56 @@ server.get('/monitores', (req, res) => {
     res.send(getMonitorListSafe());
 });
 
+server.post('/programarApagado', (req, res) => {
+    try {
+        const timeString = req.body?.time;
+        const targetDate = resolveTargetDateFromTimeString(timeString);
+
+        if (!targetDate) {
+            res.status(400).send({ error: 'Hora inválida. Usa el formato HH:MM (24h).' });
+            return;
+        }
+
+        scheduleSystemShutdown(targetDate);
+
+        res.send({
+            status: 'scheduled',
+            target: scheduledShutdown.target
+        });
+    } catch (error) {
+        console.error('Error al programar apagado:', error);
+        res.status(500).send({ error: error.message || 'No se pudo programar el apagado' });
+    }
+});
+
+server.get('/programarApagado', (req, res) => {
+    if (!scheduledShutdown) {
+        res.send({ active: false });
+        return;
+    }
+
+    const targetTs = Date.parse(scheduledShutdown.target);
+    const remaining = targetTs - Date.now();
+
+    if (!Number.isFinite(targetTs) || remaining <= 0) {
+        clearScheduledShutdown();
+        res.send({ active: false });
+        return;
+    }
+
+    res.send({
+        active: true,
+        target: scheduledShutdown.target,
+        remainingMs: remaining
+    });
+});
+
+server.delete('/programarApagado', (req, res) => {
+    const hadSchedule = clearScheduledShutdown();
+    exec('shutdown /a', () => { /* Ignorar resultado; detiene cualquier apagado pendiente */ });
+    res.send({ status: hadSchedule ? 'cancelled' : 'inactive' });
+});
+
 async function getVolume() {
     try {
         return await loudness.getVolume();
@@ -497,7 +735,7 @@ const SPECIAL_KEYS = new Set([
     'backspace', 'enter', 'return', 'space', 'tab', 'esc', 'escape',
     'insert', 'delete', 'del', 'home', 'end', 'pageup', 'pagedown',
     'up', 'down', 'left', 'right', 'capslock', 'numlock', 'scrolllock',
-    'printscreen', 'pause',
+    'printscreen', 'pause', 'pausebreak',
     'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'f9', 'f10', 'f11', 'f12',
     'media_play', 'media_stop', 'media_next', 'media_prev',
     'volume_up', 'volume_down', 'volume_mute', 'lwin', 'rwin', 'win', 'windows',
@@ -527,7 +765,8 @@ const ROBOT_KEY_ALIASES = new Map([
     ['ralt', 'alt'],
     ['lshift', 'shift'],
     ['rshift', 'shift'],
-    ['mayus', 'shift']
+    ['mayus', 'shift'],
+    ['pausebreak', 'pause']
 ]);
 
 function normalizeKeyName(key) {
@@ -587,7 +826,20 @@ function handleComboInput(keys) {
 
     const primary = convertRobotKeyName(mainKeys[mainKeys.length - 1]);
     const robotModifiers = modifiers.map(convertRobotKeyName);
-    robot.keyTap(primary, robotModifiers);
+
+    if (!robotModifiers.length) {
+        robot.keyTap(primary);
+        return;
+    }
+
+    try {
+        robotModifiers.forEach(mod => robot.keyToggle(mod, 'down'));
+        robot.keyTap(primary);
+    } finally {
+        for (let i = robotModifiers.length - 1; i >= 0; i -= 1) {
+            robot.keyToggle(robotModifiers[i], 'up');
+        }
+    }
 }
 
 function resolveCharacter({ char, codePoint }) {

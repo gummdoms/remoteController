@@ -176,6 +176,11 @@ $(document).ready(function () {
         consumeModifiers();
         contentTeclado.html(teclado_microsoft());
     });
+    //btn-show-tecl-f
+    $(document).on('click', '.btn-show-tecl-f', function () {
+        consumeModifiers();
+        contentTeclado.html(tecladoF());
+    });
     $(document).on('click', '.btn-special-co2', function () {
         consumeModifiers();
         contentTeclado.html(teclado_cod_bo2());

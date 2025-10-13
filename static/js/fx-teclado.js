@@ -2,26 +2,26 @@ const MODIFIERS_ROW = `
             <div class="row-teclado modifiers">
                 <button class="btn btn-modifier" data-modifier="ctrl">Ctrl</button>
                 <button class="btn btn-modifier" data-modifier="alt">Alt</button>
-                <button class="btn btn-modifier" data-modifier="shift">Shift</button>
-                <button class="btn btn-modifier" data-modifier="win">Win</button>
+                <button class="btn btn-modifier" data-modifier="shift">
+                    <i class="bi bi-arrow-up-circle"></i>                       
+                </button>
+                <button class="btn btn-modifier" data-modifier="win">
+                    <i class="bi bi-microsoft"></i>
+                </button>
+                <button class="btn btn-modifier" data-modifier="fn">Fn</button>
+                <button class="btn btn-f btn-show-tecl-f">F</button>
             </div>
 `;
+// const btnHideTeclado =
+//     `
+// <button class="hidde-teclado">
+//  <i class='bx bx-chevron-down'></i>
+// </button>
+//                 `;
+const btnHideTeclado = '';
 
 function teclado_principal() {
-    return `<div class="row-teclado">
-                <button class="btn btn-teclado" data-key="F1">F1</button>
-                <button class="btn btn-teclado" data-key="F2">F2</button>
-                <button class="btn btn-teclado" data-key="F3">F3</button>
-                <button class="btn btn-teclado" data-key="F4">F4</button>
-                <button class="btn btn-teclado" data-key="F5">F5</button>
-                <button class="btn btn-teclado" data-key="F6">F6</button>
-                <button class="btn btn-teclado" data-key="F7">F7</button>
-                <button class="btn btn-teclado" data-key="F8">F8</button>
-                <button class="btn btn-teclado" data-key="F9">F9</button>
-                <button class="btn btn-teclado" data-key="F10">F10</button>
-                <button class="btn btn-teclado" data-key="F11">F11</button>
-                <button class="btn btn-teclado" data-key="F12">F12</button>
-            </div>
+    return `
             <div class="row-teclado">
                 <button class="btn btn-teclado" data-key="q">q</button>
                 <button class="btn btn-teclado" data-key="w">w</button>
@@ -72,26 +72,11 @@ function teclado_principal() {
             </div>
             ${MODIFIERS_ROW}
             <div class="row-special">
-            <button class="hidde-teclado">
-                    <i class='bx bx-chevron-down'></i>
-                </button>
+               ${btnHideTeclado}
             </div>`;
 }
 function teclado_mayus() {
-    return `<div class="row-teclado">
-                <button class="btn btn-teclado" data-key="F1">F1</button>
-                <button class="btn btn-teclado" data-key="F2">F2</button>
-                <button class="btn btn-teclado" data-key="F3">F3</button>
-                <button class="btn btn-teclado" data-key="F4">F4</button>
-                <button class="btn btn-teclado" data-key="F5">F5</button>
-                <button class="btn btn-teclado" data-key="F6">F6</button>
-                <button class="btn btn-teclado" data-key="F7">F7</button>
-                <button class="btn btn-teclado" data-key="F8">F8</button>
-                <button class="btn btn-teclado" data-key="F9">F9</button>
-                <button class="btn btn-teclado" data-key="F10">F10</button>
-                <button class="btn btn-teclado" data-key="F11">F11</button>
-                <button class="btn btn-teclado" data-key="F12">F12</button>
-            </div>
+    return `
             <div class="row-teclado">
                 <button class="btn btn-teclado" data-key="Q">Q</button>
                 <button class="btn btn-teclado" data-key="W">W</button>
@@ -142,9 +127,7 @@ function teclado_mayus() {
             </div>
             ${MODIFIERS_ROW}
             <div class="row-special">
-            <button class="hidde-teclado">
-                    <i class='bx bx-chevron-down'></i>
-                </button>
+            ${btnHideTeclado}
             </div>`;
 }
 function teclado_principal_special() {
@@ -200,9 +183,7 @@ function teclado_principal_special() {
             </div>
             ${MODIFIERS_ROW}
             <div class="row-special">
-            <button class="hidde-teclado">
-                    <i class='bx bx-chevron-down'></i>
-                </button>
+             ${btnHideTeclado}
             </div>`;
 }
 function teclado_other_special() {
@@ -234,7 +215,7 @@ function teclado_other_special() {
             <div class="row-teclado">
                 <button class="btn btn-number">?123</button>
                 <button class="btn btn-special-microsoft">
-                    <i class="bi bi-microsoft"></i>
+                    <i class="bi bi-house-gear-fill"></i>
                 </button>
                 <button class="btn btn-special-co2">
                     <i class="bi bi-controller"></i>
@@ -257,9 +238,7 @@ function teclado_other_special() {
             </div>
             ${MODIFIERS_ROW}
             <div class="row-special">
-                <button class="hidde-teclado">
-                    <i class='bx bx-chevron-down'></i>
-                </button>
+                  ${btnHideTeclado}
             </div>`;
 }
 function teclado_only_numeric() {
@@ -294,7 +273,7 @@ function teclado_only_numeric() {
                     <div class="content-right">
                         <button class="btn btn-teclado" data-key="%">%</button>
                         <button class="btn btn-teclado space" data-key="space" data-hold="true">
-                            <i class='bx bx-space-bar'></i>
+                            <i class='bi bi-space'></i>
                         </button>
                         <button class="btn btn-teclado backspace" data-key="backspace" data-hold="true">
                             <i class="bi bi-backspace"></i>
@@ -316,14 +295,10 @@ function teclado_only_numeric() {
             </div>
             ${MODIFIERS_ROW}
             <div class="row-special">
-                <button class="hidde-teclado">
-                    <i class='bx bx-chevron-down'></i>
-                </button>
-
+                 ${btnHideTeclado}
             </div>
     `;
 }
-
 function teclado_microsoft() {
     let html = `
     <div class="teclado-microsoft">
@@ -368,9 +343,7 @@ function teclado_microsoft() {
     </div>
     ${MODIFIERS_ROW}
     <div class="row-special">
-        <button class="hidde-teclado">
-            <i class='bx bx-chevron-down'></i>
-        </button>
+         ${btnHideTeclado}
     </div>`;
     return html;
 }
@@ -406,12 +379,64 @@ function teclado_cod_bo2() {
             </div>
             ${MODIFIERS_ROW}
             <div class="row-special">
-            <button class="hidde-teclado">
-                    <i class='bx bx-chevron-down'></i>
-                </button>
+                ${btnHideTeclado}
             </div>
         </div>`;
     return html;
 }
-
+function tecladoF() {
+    return `
+            <div class="row-teclado">
+                <button class="btn btn-teclado" data-key="F1">F1</button>
+                <button class="btn btn-teclado" data-key="F2">F2</button>
+                <button class="btn btn-teclado" data-key="F3">F3</button>
+                <button class="btn btn-teclado" data-key="F4">F4</button>
+                <button class="btn btn-teclado" data-key="F5">F5</button>
+                <button class="btn btn-teclado" data-key="F6">F6</button>
+                <button class="btn btn-teclado" data-key="F7">F7</button>
+                <button class="btn btn-teclado" data-key="F8">F8</button>
+            </div>
+            <div class="row-teclado">
+                <button class="btn btn-teclado" data-key="F9">F9</button>
+                <button class="btn btn-teclado" data-key="F10">F10</button>
+                <button class="btn btn-teclado" data-key="F11">F11</button>
+                <button class="btn btn-teclado" data-key="F12">F12</button>
+                <button class="btn btn-teclado special-keyboard" data-key="printscreen">Prt Sc</button>
+                <button class="btn btn-teclado special-keyboard" data-key="scrolllock">Scr Lk</button>
+                <button class="btn btn-teclado special-keyboard" data-key="pausebreak">Pause</button>
+            </div>
+             <div class="row-teclado">
+                <button class="btn btn-teclado special-keyboard" data-key="up">
+                    <i class='bi bi-arrow-up'></i>
+                </button>
+             </div>
+             <div class="row-teclado">
+              <button class="btn btn-abc">ABC</button>
+                <button class="btn btn-teclado special-keyboard" data-key="left">
+                    <i class='bi bi-arrow-left'></i>
+                </button>
+                <button class="btn btn-teclado special-keyboard" data-key="down">
+                    <i class='bi bi-arrow-down'></i>
+                </button>
+                <button class="btn btn-teclado special-keyboard" data-key="right">
+                    <i class='bi bi-arrow-right'></i>
+                </button>
+                <button class="btn btn-teclado backspace" data-key="backspace" data-hold="true">
+                    <i class="bi bi-backspace"></i>
+                </button>
+                </div>
+            <div class="row-teclado">
+                <button class="btn btn-number">?123</button>
+                
+                <button class="btn btn-only-number"><span>1 2</span><span>3 4</span></button>
+                <button class="btn btn-teclado space" data-key="space" data-hold="true">space</button>
+                <button class="btn btn-teclado enter" data-key="enter" data-hold="true">
+                    <i class="bi bi-arrow-return-left"></i>
+                </button>
+            </div>
+            ${MODIFIERS_ROW}
+            <div class="row-special">
+            ${btnHideTeclado}
+            </div>`;
+}
 

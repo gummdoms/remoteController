@@ -1,0 +1,250 @@
+.modal-power-off {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.25s ease;
+    z-index: 1200;
+
+    &.is-active {
+        pointer-events: auto;
+        opacity: 1;
+
+        .container-power-off {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .overlay {
+            opacity: 1;
+        }
+    }
+
+    .overlay {
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.65);
+        opacity: 0;
+        transition: opacity 0.25s ease;
+    }
+
+    .container-power-off {
+        position: relative;
+        width: min(360px, 100%);
+        border-radius: 16px;
+        padding: 28px 26px 26px;
+        background: rgba($gray-222, 0.92);
+        border: 1px solid rgba($white, 0.04);
+        box-shadow: 0 24px 55px rgba(0, 0, 0, 0.55);
+        -webkit-backdrop-filter: blur(14px);
+        backdrop-filter: blur(14px);
+        transform: translateY(20px);
+        transition: transform 0.25s ease, opacity 0.25s ease;
+        opacity: 0;
+        z-index: 1;
+    }
+
+    .header-power-off {
+        display: flex;
+        justify-content: flex-end;
+        margin-bottom: 12px;
+
+        .btn-close-modal-power-off {
+            border: none;
+            background: none;
+            color: $white;
+            font-size: 20px;
+            cursor: pointer;
+            transition: transform 0.2s ease, opacity 0.2s ease;
+
+            &:hover {
+                transform: scale(1.1);
+                opacity: 0.8;
+            }
+        }
+    }
+
+    .body-power-off {
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+        margin-bottom: 20px;
+
+        label {
+            font-size: 13px;
+            color: rgba($white, 0.75);
+            letter-spacing: 0.02em;
+        }
+
+        input[type="time"] {
+            background: linear-gradient(135deg, rgba($gray-333, 0.95), rgba($gray-333, 0.85));
+            border: 1px solid rgba($white, 0.08);
+            border-radius: 12px;
+            padding: 14px 48px 14px 20px;
+            color: $white;
+            font-size: 18px;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            text-align: center;
+            outline: none;
+            transition: border 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+            box-shadow: inset 0 0 0 1px rgba($white, 0.02), 0 10px 25px rgba(0, 0, 0, 0.3);
+
+            &:focus {
+                border-color: rgba($primary, 0.65);
+                box-shadow: inset 0 0 0 1px rgba($primary, 0.45), 0 12px 30px rgba($primary, 0.25);
+                transform: translateY(-2px);
+            }
+
+            &::-webkit-calendar-picker-indicator {
+                background: transparent;
+                border-radius: 50%;
+                filter: invert(1);
+                cursor: pointer;
+            }
+        }
+    }
+
+    .footer-power-off {
+        display: flex;
+        gap: 12px;
+
+        .btn {
+            flex: 1;
+            border-radius: 12px;
+            font-weight: 600;
+            border: none;
+            padding: 12px 14px;
+            transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+            letter-spacing: 0.02em;
+            cursor: pointer;
+
+            &:hover {
+                transform: translateY(-1px);
+            }
+
+            &:active {
+                transform: translateY(0);
+            }
+        }
+
+        .btn-cancel-power-off {
+            background: rgba($white, 0.05);
+            color: rgba($white, 0.8);
+            border: 1px solid rgba($white, 0.06);
+            box-shadow: inset 0 0 0 1px rgba($white, 0.02);
+
+            &:hover {
+                background: rgba($white, 0.08);
+            }
+        }
+
+        .btn-set-power-off {
+            background: linear-gradient(135deg, lighten($primary, 8%), $primary);
+            color: $white;
+            box-shadow: 0 12px 28px rgba($primary, 0.35);
+
+            &:hover {
+                background: linear-gradient(135deg, lighten($primary, 12%), lighten($primary, 2%));
+                box-shadow: 0 14px 32px rgba($primary, 0.45);
+            }
+
+            &:active {
+                box-shadow: 0 8px 20px rgba($primary, 0.32);
+            }
+        }
+    }
+}
+
+.shutdown-banner {
+    position: fixed;
+    top: 18px;
+    left: 50%;
+    transform: translate(-50%, -10px);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 18px;
+    border-radius: 999px;
+    background: linear-gradient(135deg, lighten($warning, 10%), $warning);
+    color: $black;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease, transform 0.25s ease;
+    z-index: 1250;
+
+    &.is-visible {
+        opacity: 1;
+        pointer-events: auto;
+        transform: translate(-50%, 0);
+    }
+
+    &.is-manual-position {
+        transform: translate(0, 0);
+    }
+
+    .shutdown-banner__handle {
+        display: inline-flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 3px;
+        padding: 4px 8px;
+        border-radius: 999px;
+        background: rgba(0, 0, 0, 0.12);
+        cursor: grab;
+        -webkit-user-select: none;
+        user-select: none;
+
+        span {
+            display: block;
+            width: 18px;
+            height: 2px;
+            border-radius: 999px;
+            background: rgba(0, 0, 0, 0.4);
+        }
+
+        &:active {
+            cursor: grabbing;
+        }
+    }
+
+    .shutdown-banner__text {
+        font-size: 14px;
+        font-weight: 600;
+        letter-spacing: 0.2px;
+    }
+}
+
+@media (max-width: 520px) {
+    .modal-power-off {
+        padding: 16px;
+
+        .container-power-off {
+            padding: 20px;
+        }
+
+        .footer-power-off {
+            flex-direction: column;
+
+            .btn {
+                width: 100%;
+            }
+        }
+    }
+
+    .shutdown-banner {
+        width: calc(100% - 32px);
+        left: 16px;
+        right: 16px;
+        transform: translate(0, -10px);
+
+        &.is-visible {
+            transform: translate(0, 0);
+        }
+    }
+}

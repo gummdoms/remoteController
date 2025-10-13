@@ -223,7 +223,6 @@ $(document).ready(function () {
             }
         });
     });
-
     //#btn-reload
     $('#btn-reload').on('click', function () {
         location.reload();
