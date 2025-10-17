@@ -485,6 +485,15 @@ class TouchpadController {
 let touchpadController;
 document.addEventListener('DOMContentLoaded', () => {
     touchpadController = new TouchpadController();
+    window.touchpadController = touchpadController;
+    try {
+        window.dispatchEvent(new CustomEvent('touchpad-ready', { detail: touchpadController }));
+    } catch (error) {
+        // Fallback para entornos sin CustomEvent
+        const event = document.createEvent('CustomEvent');
+        event.initCustomEvent('touchpad-ready', false, false, touchpadController);
+        window.dispatchEvent(event);
+    }
 });
 
 // Exportar para uso global

@@ -1,0 +1,137 @@
+// Panel de configuración del mouse
+.container-modules-5 {
+
+
+    .mouse-config-card {
+        background-color: $gray-333;
+        border-radius: 6px;
+        box-shadow: 0px 2px 5px $gray-222;
+        padding: 12px;
+        margin-bottom: 200px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+    }
+
+    .mouse-config-title {
+        margin: 0;
+        font-size: 14px;
+        font-weight: 600;
+        color: rgba($white, 0.75);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+
+    .mouse-config-group {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        background-color: rgba($gray-444, 0.35);
+        border-radius: 4px;
+        padding: 8px;
+    }
+
+    .mouse-config-label {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        color: rgba($white, 0.7);
+        font-size: 12px;
+
+        label {
+            cursor: pointer;
+        }
+    }
+
+    .mouse-config-value {
+        font-weight: 600;
+        color: $primary;
+        font-size: 12px;
+    }
+
+    .mouse-config-slider {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 100%;
+        height: 4px;
+        border-radius: 2px;
+        background-color: rgba($white, 0.2);
+        outline: none;
+        cursor: pointer;
+
+        &::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background-color: $primary;
+            border: none;
+            box-shadow: 0 0 6px rgba($primary, 0.35);
+        }
+
+        &::-moz-range-thumb {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background-color: $primary;
+            border: none;
+            box-shadow: 0 0 6px rgba($primary, 0.35);
+        }
+    }
+
+    .mouse-config-hint {
+        color: rgba($white, 0.45);
+        font-size: 11px;
+    }
+
+    .mouse-config-actions {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+    }
+
+    .mouse-config-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 12px;
+        background-color: $gray-444;
+        color: rgba($white, 0.75);
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+
+        i {
+            font-size: 14px;
+        }
+
+        &:hover {
+            background-color: lighten($gray-444, 5%);
+        }
+
+        &:active {
+            background-color: darken($gray-444, 4%);
+        }
+    }
+
+    .mouse-config-status {
+        flex: 1;
+        text-align: right;
+        font-size: 11px;
+        color: rgba($white, 0.5);
+        min-height: 16px;
+
+        &.is-success {
+            color: $success;
+        }
+
+        &.is-error {
+            color: $danger;
+        }
+    }
+}

@@ -93,6 +93,38 @@
 
                 </div>
             </section>
+            <section class="container-modules container-modules-5">
+                <div class="mouse-config-card">
+                    <h2 class="mouse-config-title">Configuración del mouse</h2>
+                    <div class="mouse-config-group">
+                        <div class="mouse-config-label">
+                            <label for="mouse-pointer-speed">Velocidad del puntero</label>
+                            <span class="mouse-config-value" data-role="pointer-indicator">2.5x</span>
+                        </div>
+                        <input type="range" id="mouse-pointer-speed" class="mouse-config-slider" min="0.5" max="6"
+                            step="0.1" value="2.5" aria-describedby="mouse-pointer-hint">
+                        <small id="mouse-pointer-hint" class="mouse-config-hint">Ajusta la rapidez del cursor</small>
+                    </div>
+                    <div class="mouse-config-group">
+                        <div class="mouse-config-label">
+                            <label for="mouse-scroll-speed">Velocidad del scroll</label>
+                            <span class="mouse-config-value" data-role="scroll-indicator">1.0x</span>
+                        </div>
+                        <input type="range" id="mouse-scroll-speed" class="mouse-config-slider" min="0.5" max="18"
+                            step="0.1" value="1.0" aria-describedby="mouse-scroll-hint">
+                        <small id="mouse-scroll-hint" class="mouse-config-hint">Define qué tan rápido se
+                            desplaza</small>
+                    </div>
+                    <div class="mouse-config-actions">
+                        <button type="button" class="mouse-config-btn" id="mouse-config-reset">
+                            <i class="bi bi-arrow-counterclockwise"></i>
+                            <span>Restablecer</span>
+                        </button>
+                        <span class="mouse-config-status" data-role="config-status" role="status"
+                            aria-live="polite"></span>
+                    </div>
+                </div>
+            </section>
         </div>
     </main>
     <aside class="container-teclados">
@@ -256,6 +288,7 @@
     <script src="/static/js/index.js"></script>
     <script src="/static/js/controller_app.js"></script>
     <script src="/static/js/powerOff.js"></script>
+    <script src="/static/js/mouse.config.js"></script>
 
 </body>
 

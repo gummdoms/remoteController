@@ -12,6 +12,7 @@ const robot = require('robotjs');
 const cors = require('cors');
 const multer = require('multer');
 const connApps = require('./classes/Apps.js');
+const SettingsStore = require('./classes/Settings.js');
 
 const ALERT_THRESHOLD_MS = 5 * 60 * 1000;
 let scheduledShutdown = null;
@@ -242,6 +243,12 @@ const upload = multer({ storage: storage });
 const dbPath = resolvedPath();
 ensureDirectory(path.dirname(dbPath));
 const db = new connApps(dbPath);
+const settingsStore = new SettingsStore(dbPath);
+
+const MOUSE_POINTER_MIN = 0.5;
+const MOUSE_POINTER_MAX = 6;
+const MOUSE_SCROLL_MIN = 0.5;
+const MOUSE_SCROLL_MAX = 18;
 
 const queue = asyncQueue.queue(async (task, callback) => {
     try {
@@ -1200,6 +1207,38 @@ server.post('/mouse/scroll', (req, res) => {
     } catch (error) {
         console.error('Error en scroll:', error);
         res.status(500).send({ error: 'Error al hacer scroll' });
+    }
+});
+
+server.get('/mouse/config', async (req, res) => {
+    try {
+        const config = await settingsStore.getMouseConfig();
+        res.send(config);
+    } catch (error) {
+        console.error('Error al obtener la configuración del mouse:', error);
+        res.status(500).send({ error: 'No se pudo obtener la configuración del mouse' });
+    }
+});
+
+server.post('/mouse/config', async (req, res) => {
+    const { pointerSpeed, scrollSpeed } = req.body;
+
+    const pointerValue = Number(pointerSpeed);
+    const scrollValue = Number(scrollSpeed);
+
+    if (!Number.isFinite(pointerValue) || !Number.isFinite(scrollValue)) {
+        return res.status(400).send({ error: 'Los valores enviados no son válidos' });
+    }
+
+    const clampedPointer = Math.min(MOUSE_POINTER_MAX, Math.max(MOUSE_POINTER_MIN, pointerValue));
+    const clampedScroll = Math.min(MOUSE_SCROLL_MAX, Math.max(MOUSE_SCROLL_MIN, scrollValue));
+
+    try {
+        const config = await settingsStore.saveMouseConfig(clampedPointer, clampedScroll);
+        res.send(config);
+    } catch (error) {
+        console.error('Error al guardar la configuración del mouse:', error);
+        res.status(500).send({ error: 'No se pudo guardar la configuración del mouse' });
     }
 });
 
