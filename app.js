@@ -20,6 +20,9 @@ const displayControl = require('./platform/displayControl');
 const audioControl = require('./platform/audioControl');
 const displayMode = require('./platform/displayMode');
 
+const isWindows = process.platform === 'win32';
+const isLinux = process.platform === 'linux';
+
 const ALERT_THRESHOLD_MS = 5 * 60 * 1000;
 const hasRobotFallback = () => Boolean(robot);
 const INPUT_PROVIDER_UNAVAILABLE_MSG = 'No hay módulos de control de entradas disponibles. Ejecute "npm run build:native" o instale la dependencia opcional robotjs.';
@@ -76,6 +79,82 @@ const modeToLegacyCode = (mode) => {
     };
     return mapping[mode] || null;
 };
+function buildLinuxLogoutCommand() {
+    if (!isLinux) {
+        return null;
+    }
+    if (process.env.XDG_SESSION_ID) {
+        return `loginctl terminate-session ${process.env.XDG_SESSION_ID}`;
+    }
+    const user = process.env.USER || process.env.LOGNAME;
+    if (user) {
+        return `loginctl terminate-user ${user}`;
+    }
+    return 'loginctl terminate-user $(id -un)';
+}
+
+const powerActionMap = {
+    shutdown: {
+        win32: 'shutdown /s /t 0',
+        linux: 'systemctl poweroff'
+    },
+    restart: {
+        win32: 'shutdown /r /t 0',
+        linux: 'systemctl reboot'
+    },
+    suspend: {
+        win32: 'rundll32.exe powrprof.dll,SetSuspendState 0,1,0',
+        linux: 'systemctl suspend'
+    },
+    logout: {
+        win32: 'shutdown /l',
+        linux: buildLinuxLogoutCommand
+    }
+};
+
+function getPowerCommand(action) {
+    const entry = powerActionMap[action];
+    if (!entry) {
+        return null;
+    }
+    const value = isWindows ? entry.win32 : isLinux ? entry.linux : null;
+    if (typeof value === 'function') {
+        return value();
+    }
+    return value || null;
+}
+
+function runPowerCommand(action, label = action) {
+    const command = getPowerCommand(action);
+    if (!command) {
+        throw new Error(`La acción "${label}" no está soportada en este sistema.`);
+    }
+    const child = exec(command, (error, stdout, stderr) => {
+        if (error) {
+            console.error(`Error al ejecutar ${label}:`, error);
+        }
+        if (stderr) {
+            console.error(`stderr ${label}:`, stderr);
+        }
+        if (stdout) {
+            console.log(`stdout ${label}:`, stdout);
+        }
+    });
+    if (child && typeof child.unref === 'function') {
+        child.unref();
+    }
+    return child;
+}
+
+function handlePowerRequest(action, res, label) {
+    try {
+        runPowerCommand(action, label);
+        res.send({ status: 'executing', action, platform: process.platform });
+    } catch (error) {
+        const status = /no está soportada/i.test(error.message) ? 501 : 500;
+        res.status(status).send({ error: error.message });
+    }
+}
 let scheduledShutdown = null;
 let scheduledShutdownTimer = null;
 let scheduledAlertTimeout = null;
@@ -223,17 +302,11 @@ function scheduleSystemShutdown(targetDate) {
 
     scheduledShutdownTimer = setTimeout(() => {
         console.log('Ejecutando apagado programado');
-        exec('shutdown /s /t 0', (error, stdout, stderr) => {
-            if (error) {
-                console.error('Error al ejecutar apagado programado:', error);
-            }
-            if (stderr) {
-                console.error('stderr apagado programado:', stderr);
-            }
-            if (stdout) {
-                console.log('stdout apagado programado:', stdout);
-            }
-        });
+        try {
+            runPowerCommand('shutdown', 'apagado programado');
+        } catch (error) {
+            console.error('Error al ejecutar apagado programado:', error);
+        }
         clearScheduledShutdown();
     }, delay);
 }
@@ -545,7 +618,10 @@ server.get('/programarApagado', (req, res) => {
 
 server.delete('/programarApagado', (req, res) => {
     const hadSchedule = clearScheduledShutdown();
-    exec('shutdown /a', () => { /* Ignorar resultado; detiene cualquier apagado pendiente */ });
+    const cancelCommand = isWindows ? 'shutdown /a' : isLinux ? 'shutdown -c' : null;
+    if (cancelCommand) {
+        exec(cancelCommand, () => { /* Ignorar resultado; detiene cualquier apagado pendiente */ });
+    }
     res.send({ status: hadSchedule ? 'cancelled' : 'inactive' });
 });
 
@@ -675,54 +751,22 @@ server.get('/estadoPantalla', async (req, res) => {
 
 //apagar pc
 server.get('/apagar', (req, res) => {
-    //apagar pc
-    exec('shutdown /s /t 0', (error, stdout, stderr) => {
-        if (error) {
-            console.error('Error al apagar pc:', error);
-            return;
-        }
-        console.log('Pc apagada');
-    });
-
+    handlePowerRequest('shutdown', res, 'apagar');
 });
 
 //reiniciar pc
 server.get('/reiniciar', (req, res) => {
-    //reiniciar pc
-    exec('shutdown /r /t 0', (error, stdout, stderr) => {
-        if (error) {
-            console.error('Error al reiniciar pc:', error);
-            return;
-        }
-        console.log('Pc reiniciada');
-    });
-
+    handlePowerRequest('restart', res, 'reiniciar');
 });
 
 //cerrar sesion
 server.get('/cerrarSesion', (req, res) => {
-    //cerrar sesion
-    exec('shutdown /l', (error, stdout, stderr) => {
-        if (error) {
-            console.error('Error al cerrar sesion:', error);
-            return;
-        }
-        console.log('Sesion cerrada');
-    });
-
+    handlePowerRequest('logout', res, 'cerrar sesión');
 });
 
 //suspender pc
 server.get('/suspender', (req, res) => {
-    //suspender pc
-    exec('rundll32.exe powrprof.dll,SetSuspendState 0,1,0', (error, stdout, stderr) => {
-        if (error) {
-            console.error('Error al suspender pc:', error);
-            return;
-        }
-        console.log('Pc suspendida');
-    });
-
+    handlePowerRequest('suspend', res, 'suspender');
 });
 
 const SPECIAL_KEYS = new Set([
