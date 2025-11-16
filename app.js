@@ -1,20 +1,81 @@
 const { app, BrowserWindow, ipcMain, Tray, Menu, dialog, shell } = require('electron');
 const express = require('express');
 const bodyParser = require('body-parser');
-const ddcci = require("@hensm/ddcci");
-//const audio = require('win-audio').speaker;
-const loudness = require('loudness');
 const path = require('path');
 const { exec, execFile } = require('child_process');
 const asyncQueue = require('async'); // Para manejar la cola de tareas
 const fs = require('fs');
-const robot = require('robotjs');
+let robot = null;
+try {
+    robot = require('robotjs');
+    console.log('✅ robotjs cargado como fallback de control de entradas');
+} catch (error) {
+    console.warn('⚠️ robotjs no está disponible como fallback:', error.message);
+}
 const cors = require('cors');
 const multer = require('multer');
 const connApps = require('./classes/Apps.js');
 const SettingsStore = require('./classes/Settings.js');
+const displayControl = require('./platform/displayControl');
+const audioControl = require('./platform/audioControl');
+const displayMode = require('./platform/displayMode');
 
 const ALERT_THRESHOLD_MS = 5 * 60 * 1000;
+const hasRobotFallback = () => Boolean(robot);
+const INPUT_PROVIDER_UNAVAILABLE_MSG = 'No hay módulos de control de entradas disponibles. Ejecute "npm run build:native" o instale la dependencia opcional robotjs.';
+const isProviderUnavailableError = (error) => Boolean(error && error.message === INPUT_PROVIDER_UNAVAILABLE_MSG);
+const sendInputError = (res, error, fallbackMessage) => {
+    if (isProviderUnavailableError(error)) {
+        return res.status(503).send({ error: INPUT_PROVIDER_UNAVAILABLE_MSG });
+    }
+    console.error(fallbackMessage, error);
+    return res.status(500).send({ error: fallbackMessage });
+};
+const ensureDisplayControlAvailable = (res) => {
+    if (displayControl.isSupported()) {
+        return true;
+    }
+    if (res) {
+        res.status(501).send({ error: displayControl.getUnavailableReason() });
+    }
+    return false;
+};
+const ensureAudioControlAvailable = (res) => {
+    if (audioControl.isSupported()) {
+        return true;
+    }
+    if (res) {
+        res.status(501).send({ error: audioControl.getUnavailableReason() });
+    }
+    return false;
+};
+const ensureDisplayModeAvailable = (res) => {
+    if (displayMode.isSupported()) {
+        return true;
+    }
+    if (res) {
+        res.status(501).send({ error: displayMode.getUnavailableReason() });
+    }
+    return false;
+};
+const parseBoolean = (value) => {
+    if (typeof value === 'boolean') {
+        return value;
+    }
+    if (typeof value === 'string') {
+        return ['true', '1', 'on', 'yes'].includes(value.toLowerCase());
+    }
+    return Boolean(value);
+};
+const modeToLegacyCode = (mode) => {
+    const mapping = {
+        internal: '4500',
+        external: '4501',
+        clone: '4502',
+        extend: '4503'
+    };
+    return mapping[mode] || null;
+};
 let scheduledShutdown = null;
 let scheduledShutdownTimer = null;
 let scheduledAlertTimeout = null;
@@ -208,7 +269,7 @@ try {
     nativeInput = require('./modules');
     console.log('✅ Módulo nativo de entradas cargado correctamente');
 } catch (error) {
-    console.warn('⚠️ No se pudo cargar el módulo nativo de entradas. Usando robotjs como fallback.');
+    console.warn('⚠️ No se pudo cargar el módulo nativo de entradas. Se usará robotjs si está disponible.');
     console.warn('Para usar el módulo nativo, ejecute: cd modules && npm install');
     nativeInput = null;
 }
@@ -259,58 +320,6 @@ const queue = asyncQueue.queue(async (task, callback) => {
         callback();
     }
 }, 1);
-const getMonitorListSafe = () => {
-    try {
-        return ddcci.getMonitorList();
-    } catch (error) {
-        console.warn('No se pudo obtener la lista de monitores DDC/CI:', error.message);
-        return [];
-    }
-};
-
-async function ajustarBrillo(brillo) {
-    for (const monitor of getMonitorListSafe()) {
-        try {
-            await ddcci.setBrightness(monitor, brillo);
-        } catch (error) {
-            console.warn(`No se pudo ajustar el brillo del monitor ${monitor}:`, error.message);
-        }
-    }
-}
-
-async function brilloActual() {
-    const valores = [];
-    for (const monitor of getMonitorListSafe()) {
-        try {
-            valores.push(await ddcci.getBrightness(monitor));
-        } catch (error) {
-            console.warn(`No se pudo obtener el brillo del monitor ${monitor}:`, error.message);
-        }
-    }
-    return valores;
-}
-
-async function ajustarContraste(contraste) {
-    for (const monitor of getMonitorListSafe()) {
-        try {
-            await ddcci.setContrast(monitor, contraste);
-        } catch (error) {
-            console.warn(`No se pudo ajustar el contraste del monitor ${monitor}:`, error.message);
-        }
-    }
-}
-
-async function contrasteActual() {
-    const valores = [];
-    for (const monitor of getMonitorListSafe()) {
-        try {
-            valores.push(await ddcci.getContrast(monitor));
-        } catch (error) {
-            console.warn(`No se pudo obtener el contraste del monitor ${monitor}:`, error.message);
-        }
-    }
-    return valores;
-}
 
 
 let mainWindow;
@@ -410,49 +419,84 @@ server.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'views', 'index.html'));
 });
 server.get('/brillo', async (req, res) => {
-    const valores = await brilloActual();
-    if (!valores.length) {
-        res.status(503).send({ error: 'No se pudo leer el brillo de los monitores' });
+    if (!ensureDisplayControlAvailable(res)) {
         return;
     }
-    res.send({ brillo: valores[0], lista: valores });
+    const displayId = req.query?.displayId;
+    try {
+        const valores = await displayControl.getBrightnessList(displayId);
+        if (!valores.length) {
+            res.status(503).send({ error: 'No se pudo leer el brillo de los monitores' });
+            return;
+        }
+        res.send({ brillo: valores[0]?.value ?? null, lista: valores });
+    } catch (error) {
+        console.error('Error al leer brillo:', error);
+        res.status(500).send({ error: 'No se pudo leer el brillo de los monitores' });
+    }
 });
 
 server.post('/brillo', (req, res) => {
-    let brillo = parseInt(req.body.brillo);
-    if (isNaN(brillo) || brillo < 0 || brillo > 100) {
+    if (!ensureDisplayControlAvailable(res)) {
+        return;
+    }
+    const brillo = Number(req.body.brillo);
+    const displayId = req.body?.displayId;
+    if (!Number.isFinite(brillo) || brillo < 0 || brillo > 100) {
         res.status(400).send({ error: 'El brillo debe ser un número entre 0 y 100' });
         return;
     }
     queue.push(async () => {
-        await ajustarBrillo(brillo);
+        await displayControl.setBrightness(brillo, displayId);
     });
     res.send({ status: 'ok' });
 });
 
 server.get('/contraste', async (req, res) => {
-    const valores = await contrasteActual();
-    if (!valores.length) {
-        res.status(503).send({ error: 'No se pudo leer el contraste de los monitores' });
+    if (!ensureDisplayControlAvailable(res)) {
         return;
     }
-    res.send({ contraste: valores[0], lista: valores });
+    const displayId = req.query?.displayId;
+    try {
+        const valores = await displayControl.getContrastList(displayId);
+        if (!valores.length) {
+            res.status(503).send({ error: 'No se pudo leer el contraste de los monitores' });
+            return;
+        }
+        res.send({ contraste: valores[0]?.value ?? null, lista: valores });
+    } catch (error) {
+        console.error('Error al leer contraste:', error);
+        res.status(500).send({ error: 'No se pudo leer el contraste de los monitores' });
+    }
 });
 
 server.post('/contraste', (req, res) => {
-    let contraste = parseInt(req.body.contraste);
-    if (isNaN(contraste) || contraste < 0 || contraste > 100) {
+    if (!ensureDisplayControlAvailable(res)) {
+        return;
+    }
+    const contraste = Number(req.body.contraste);
+    const displayId = req.body?.displayId;
+    if (!Number.isFinite(contraste) || contraste < 0 || contraste > 100) {
         res.status(400).send({ error: 'El contraste debe ser un número entre 0 y 100' });
         return;
     }
     queue.push(async () => {
-        await ajustarContraste(contraste);
+        await displayControl.setContrast(contraste, displayId);
     });
     res.send({ status: 'ok' });
 });
 
-server.get('/monitores', (req, res) => {
-    res.send(getMonitorListSafe());
+server.get('/monitores', async (req, res) => {
+    if (!ensureDisplayControlAvailable(res)) {
+        return;
+    }
+    try {
+        const lista = await displayControl.getMonitorList();
+        res.send(lista);
+    } catch (error) {
+        console.error('Error al obtener lista de monitores:', error);
+        res.status(500).send({ error: 'No se pudo obtener la lista de monitores' });
+    }
 });
 
 server.post('/programarApagado', (req, res) => {
@@ -505,72 +549,75 @@ server.delete('/programarApagado', (req, res) => {
     res.send({ status: hadSchedule ? 'cancelled' : 'inactive' });
 });
 
-async function getVolume() {
+server.get('/volumen', async (req, res) => {
+    if (!ensureAudioControlAvailable(res)) {
+        return;
+    }
     try {
-        return await loudness.getVolume();
+        const volumen = await audioControl.getVolume();
+        res.send({ volumen });
     } catch (error) {
         console.error('Error al obtener el volumen:', error);
-        return null;
+        res.status(500).send({ error: 'No se pudo obtener el volumen actual' });
     }
-}
-async function setVolume(vol) {
+});
+
+server.post('/volumen', async (req, res) => {
+    if (!ensureAudioControlAvailable(res)) {
+        return;
+    }
+    const valor = Number(req.body.volumen);
+    if (!Number.isFinite(valor)) {
+        res.status(400).send({ error: 'El volumen debe ser un número entre 0 y 100' });
+        return;
+    }
+    const clamped = Math.max(0, Math.min(100, Math.round(valor)));
     try {
-        vol = parseInt(vol);
-        if (isNaN(vol)) {
-            vol = 0;
-        } else if (vol < 0) {
-            vol = 0;
-        } else if (vol > 100) {
-            vol = 100;
-        }
-        await loudness.setVolume(vol);
+        await audioControl.setVolume(clamped);
+        res.send({ status: 'ok' });
     } catch (error) {
         console.error('Error al ajustar el volumen:', error);
+        res.status(500).send({ error: 'No se pudo ajustar el volumen' });
     }
-}
-async function setMuted(muted) {
-    try {
-        await loudness.setMuted(muted);
-    } catch (error) {
-        console.error('Error al silenciar/des-silenciar el volumen:', error);
-    }
-}
-async function getMuted() {
-    try {
-        return await loudness.getMuted();
-    } catch (error) {
-        console.error('Error al obtener el estado de silencio:', error);
-        return null;
-    }
-}
-async function setUnmute() {
-    try {
-        await loudness.setMuted(false);
-    } catch (error) {
-        console.error('Error al des-silenciar el volumen:', error);
-    }
-}
-server.get('/volumen', async (req, res) => {
-    const volumen = await getVolume();
-    res.send({ volumen });
 });
-server.post('/volumen', async (req, res) => {
-    await setVolume(req.body.volumen);
-    res.send({ status: 'ok' });
-});
+
 server.get('/muted', async (req, res) => {
-    const muted = await getMuted();
-    res.send({ muted });
+    if (!ensureAudioControlAvailable(res)) {
+        return;
+    }
+    try {
+        const muted = await audioControl.getMuted();
+        res.send({ muted });
+    } catch (error) {
+        console.error('Error al leer estado de silencio:', error);
+        res.status(500).send({ error: 'No se pudo obtener el estado de silencio' });
+    }
 });
 
 server.post('/muted', async (req, res) => {
-    await setMuted(req.body.muted);
-    res.send({ status: 'ok' });
+    if (!ensureAudioControlAvailable(res)) {
+        return;
+    }
+    try {
+        await audioControl.setMuted(parseBoolean(req.body.muted));
+        res.send({ status: 'ok' });
+    } catch (error) {
+        console.error('Error al actualizar estado de silencio:', error);
+        res.status(500).send({ error: 'No se pudo actualizar el estado de silencio' });
+    }
 });
 
 server.get('/unmute', async (req, res) => {
-    await setUnmute();
-    res.send({ status: 'ok' });
+    if (!ensureAudioControlAvailable(res)) {
+        return;
+    }
+    try {
+        await audioControl.setMuted(false);
+        res.send({ status: 'ok' });
+    } catch (error) {
+        console.error('Error al des-silenciar el audio:', error);
+        res.status(500).send({ error: 'No se pudo restablecer el audio' });
+    }
 });
 
 //reproducir audio de la pc para verificacion de audio
@@ -583,107 +630,47 @@ server.get('/reproducirSonido', (req, res) => {
 });
 
 
-//activar solo la pantalla de pc, es decir que el segundo monitor no se active
-server.get('/soloPc', (req, res) => {
-    //dejar activa solo la pantalla de la pc
-    exec('DisplaySwitch.exe /internal', (error, stdout, stderr) => {
-        if (error) {
-            console.error('Error al activar solo la pantalla de la pc:', error);
-            return;
-        }
-        console.log('Pantalla de la pc activada');
-    });
-});
-
-//Duplicado de pantalla
-server.get('/duplicado', (req, res) => {
-    //duplicar pantalla
-    exec('DisplaySwitch.exe /clone', (error, stdout, stderr) => {
-        if (error) {
-            console.error('Error al duplicar pantalla:', error);
-            return;
-        }
-        console.log('Pantalla duplicada');
-    });
-
-});
-
-//Extender pantalla
-server.get('/extender', (req, res) => {
-    //extender pantalla
-    exec('DisplaySwitch.exe /extend', (error, stdout, stderr) => {
-        if (error) {
-            console.error('Error al extender pantalla:', error);
-            return;
-        }
-        console.log('Pantalla extendida');
-    });
-
-});
-
-//Mostrar pantalla secundaria
-server.get('/mostrarSecundaria', (req, res) => {
-    //mostrar pantalla secundaria
-    exec('DisplaySwitch.exe /external', (error, stdout, stderr) => {
-        if (error) {
-            console.error('Error al mostrar pantalla secundaria:', error);
-            return;
-        }
-        console.log('Pantalla secundaria activada');
-    });
-
-});
-
-//ver si la pantalla esta ampliada, duplicada, extendida o solo la pc
-server.get('/estadoPantalla', (req, res) => {
-    const scriptPath = path.join(__dirname, 'GetDisplayState.ps1');
-    //verificar si existe el scriptº
-    if (!fs.existsSync(scriptPath)) {
-        //crearlo
-        let dataScript = `
-        Add-Type -TypeDefinition @"
-using System;
-using System.Runtime.InteropServices;
-public class DisplaySwitch {
-    [DllImport("user32.dll")]
-    public static extern int GetSystemMetrics(int nIndex);
-}
-"@
-
-$primaryMonitor = [DisplaySwitch]::GetSystemMetrics(80)
-$otherMonitors = [DisplaySwitch]::GetSystemMetrics(79)
-
-if ($primaryMonitor -eq 0) {
-    Write-Output "4500"
-} elseif ($otherMonitors -eq 1) {
-    Write-Output "4501"
-} elseif ($otherMonitors -eq 2) {
-    Write-Output "4502"
-} elseif ($otherMonitors -ge 3) {
-    Write-Output "4503"
-} else {
-    Write-Output "4600"
-}
-
-        `;
-
-        fs.writeFileSync(scriptPath, dataScript);
+const handleDisplayModeChange = async (mode, res, successMessage) => {
+    if (!ensureDisplayModeAvailable(res)) {
+        return;
     }
-    exec(`powershell.exe -File "${scriptPath}"`, (error, stdout, stderr) => {
-        if (error) {
-            console.error('Error al obtener el estado de la pantalla:', error);
-            res.status(500).send({ error: 'Error al obtener el estado de la pantalla' });
-            return;
-        }
-        if (stderr) {
-            console.error('Stderr:', stderr);
-            res.status(500).send({ error: 'Error al obtener el estado de la pantalla' });
-            return;
-        }
-        const estado = stdout.trim();
-        console.log('Estado de la pantalla:', estado);
-        res.send({ estado });
-    });
+    try {
+        await displayMode.setMode(mode);
+        res.send({ status: 'ok', mode });
+    } catch (error) {
+        console.error(successMessage, error);
+        res.status(500).send({ error: error.message || 'No se pudo cambiar el modo de pantalla' });
+    }
+};
+
+server.get('/soloPc', async (req, res) => {
+    await handleDisplayModeChange('internal', res, 'Error al activar solo la pantalla principal');
+});
+
+server.get('/duplicado', async (req, res) => {
+    await handleDisplayModeChange('clone', res, 'Error al duplicar pantalla');
+});
+
+server.get('/extender', async (req, res) => {
+    await handleDisplayModeChange('extend', res, 'Error al extender pantalla');
+});
+
+server.get('/mostrarSecundaria', async (req, res) => {
+    await handleDisplayModeChange('external', res, 'Error al mostrar pantalla secundaria');
+});
+
+server.get('/estadoPantalla', async (req, res) => {
+    if (!ensureDisplayModeAvailable(res)) {
+        return;
+    }
+    try {
+        const state = await displayMode.getState();
+        const legacyCode = state.legacyCode || modeToLegacyCode(state.mode) || '4600';
+        res.send({ estado: legacyCode, mode: state.mode, backend: displayMode.name });
+    } catch (error) {
+        console.error('Error al obtener el estado de la pantalla:', error);
+        res.status(500).send({ error: 'Error al obtener el estado de la pantalla' });
+    }
 });
 
 //apagar pc
@@ -801,6 +788,9 @@ function handleKeyAction(key, action) {
         return;
     }
 
+    if (!hasRobotFallback()) {
+        throw new Error(INPUT_PROVIDER_UNAVAILABLE_MSG);
+    }
     const robotKey = convertRobotKeyName(normalized);
     robot.keyToggle(robotKey, safeAction);
 }
@@ -823,6 +813,9 @@ function handleComboInput(keys) {
         return;
     }
 
+    if (!hasRobotFallback()) {
+        throw new Error(INPUT_PROVIDER_UNAVAILABLE_MSG);
+    }
     const modifiers = normalized.filter(key => MODIFIER_KEYS.has(key));
     const mainKeys = normalized.filter(key => !MODIFIER_KEYS.has(key));
 
@@ -880,6 +873,9 @@ function handleCharacterInput(payload) {
         return;
     }
 
+    if (!hasRobotFallback()) {
+        throw new Error(INPUT_PROVIDER_UNAVAILABLE_MSG);
+    }
     if (isSpecial) {
         const robotKey = convertRobotKeyName(normalized);
         robot.keyTap(robotKey);
@@ -913,8 +909,7 @@ server.post('/teclear', (req, res) => {
         handleInputPayload(req.body || {});
         res.send({ status: 'ok' });
     } catch (error) {
-        console.error('Error al teclear:', error);
-        res.status(500).send({ error: 'Error al teclear' });
+        sendInputError(res, error, 'Error al teclear');
     }
 });
 
@@ -1146,14 +1141,16 @@ server.post('/mouse/move', (req, res) => {
             // Usar módulo nativo (más rápido y preciso)
             nativeInput.moveRelative(dx, dy);
         } else {
+            if (!hasRobotFallback()) {
+                throw new Error(INPUT_PROVIDER_UNAVAILABLE_MSG);
+            }
             // Fallback a robotjs
             const currentPos = robot.getMousePos();
             robot.moveMouse(currentPos.x + dx, currentPos.y + dy);
         }
         res.send({ status: 'ok' });
     } catch (error) {
-        console.error('Error moviendo mouse:', error);
-        res.status(500).send({ error: 'Error al mover el mouse' });
+        sendInputError(res, error, 'Error al mover el mouse');
     }
 });
 
@@ -1165,12 +1162,14 @@ server.post('/mouse/click', (req, res) => {
         if (nativeInput) {
             nativeInput.click(button);
         } else {
+            if (!hasRobotFallback()) {
+                throw new Error(INPUT_PROVIDER_UNAVAILABLE_MSG);
+            }
             robot.mouseClick(button);
         }
         res.send({ status: 'ok' });
     } catch (error) {
-        console.error('Error en click:', error);
-        res.status(500).send({ error: 'Error al hacer click' });
+        sendInputError(res, error, 'Error al hacer click');
     }
 });
 
@@ -1180,12 +1179,14 @@ server.post('/mouse/doubleclick', (req, res) => {
         if (nativeInput) {
             nativeInput.doubleClick();
         } else {
+            if (!hasRobotFallback()) {
+                throw new Error(INPUT_PROVIDER_UNAVAILABLE_MSG);
+            }
             robot.mouseClick('left', true); // true = double click
         }
         res.send({ status: 'ok' });
     } catch (error) {
-        console.error('Error en doble click:', error);
-        res.status(500).send({ error: 'Error al hacer doble click' });
+        sendInputError(res, error, 'Error al hacer doble click');
     }
 });
 
@@ -1201,12 +1202,14 @@ server.post('/mouse/scroll', (req, res) => {
         if (nativeInput) {
             nativeInput.scroll(delta);
         } else {
+            if (!hasRobotFallback()) {
+                throw new Error(INPUT_PROVIDER_UNAVAILABLE_MSG);
+            }
             robot.scrollMouse(0, delta > 0 ? 1 : -1);
         }
         res.send({ status: 'ok' });
     } catch (error) {
-        console.error('Error en scroll:', error);
-        res.status(500).send({ error: 'Error al hacer scroll' });
+        sendInputError(res, error, 'Error al hacer scroll');
     }
 });
 
@@ -1249,12 +1252,14 @@ server.get('/mouse/position', (req, res) => {
         if (nativeInput) {
             position = nativeInput.getPosition();
         } else {
+            if (!hasRobotFallback()) {
+                throw new Error(INPUT_PROVIDER_UNAVAILABLE_MSG);
+            }
             position = robot.getMousePos();
         }
         res.send({ position });
     } catch (error) {
-        console.error('Error obteniendo posición:', error);
-        res.status(500).send({ error: 'Error al obtener posición del mouse' });
+        sendInputError(res, error, 'Error al obtener posición del mouse');
     }
 });
 
@@ -1266,12 +1271,14 @@ server.post('/mouse/down', (req, res) => {
         if (nativeInput) {
             nativeInput.mouseDown(button);
         } else {
+            if (!hasRobotFallback()) {
+                throw new Error(INPUT_PROVIDER_UNAVAILABLE_MSG);
+            }
             robot.mouseToggle('down', button);
         }
         res.send({ status: 'ok' });
     } catch (error) {
-        console.error('Error en mouse down:', error);
-        res.status(500).send({ error: 'Error al presionar botón del mouse' });
+        sendInputError(res, error, 'Error al presionar botón del mouse');
     }
 });
 
@@ -1283,12 +1290,14 @@ server.post('/mouse/up', (req, res) => {
         if (nativeInput) {
             nativeInput.mouseUp(button);
         } else {
+            if (!hasRobotFallback()) {
+                throw new Error(INPUT_PROVIDER_UNAVAILABLE_MSG);
+            }
             robot.mouseToggle('up', button);
         }
         res.send({ status: 'ok' });
     } catch (error) {
-        console.error('Error en mouse up:', error);
-        res.status(500).send({ error: 'Error al soltar botón del mouse' });
+        sendInputError(res, error, 'Error al soltar botón del mouse');
     }
 });
 

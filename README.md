@@ -21,6 +21,11 @@
 1. **Python 3.x** - [Descargar](https://www.python.org/downloads/)
 2. **Visual Studio Build Tools 2019/2022** - [Descargar](https://visualstudio.microsoft.com/downloads/)
 3. **Node.js** - Ya instalado con Electron
+4. *(Linux)* **Herramientas del sistema**
+    - `ddcutil` + pertenecer a los grupos `i2c` y `video` para controlar brillo/contraste en monitores externos (DDC/CI).
+    - `brightnessctl` *(opcional)* para paneles internos sin DDC/CI.
+    - `xrandr` para sesiones X11 o `wlr-randr` para sesiones Wayland (Hyprland/Sway) a fin de cambiar modos de pantalla (`soloPc`, `duplicado`, etc.).
+    - En Wayland (KDE Plasma) instala `kscreen` (incluye `kscreen-doctor`). Si `XDG_SESSION_TYPE=wayland` y `XDG_CURRENT_DESKTOP` contiene `KDE`/`plasma`, la app usará automáticamente este backend para controlar los modos.
 
 ### Instalación
 

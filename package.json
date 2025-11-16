@@ -42,7 +42,6 @@
     }
   },
   "dependencies": {
-    "@hensm/ddcci": "^0.1.0",
     "async": "^3.2.6",
     "body-parser": "^2.2.0",
     "bootstrap-icons": "^1.13.1",
@@ -52,17 +51,26 @@
     "loudness": "^0.4.2",
     "multer": "^2.0.2",
     "node-abi": "^4.14.0",
+    "node-addon-api": "^7.1.1",
     "nodemon": "^3.1.10",
     "normalize.css": "^8.0.1",
     "open": "^10.2.0",
-    "robotjs": "^0.6.0",
     "sqlite3": "^5.1.7",
-    "sweetalert2": "^11.26.1",
-    "win-audio": "^3.0.5"
+    "sweetalert2": "^11.26.1"
+  },
+  "optionalDependencies": {
+    "@hensm/ddcci": "^0.1.0",
+    "robotjs": "^0.6.0"
+  },
+  "overrides": {
+    "@hensm/ddcci": {
+      "node-addon-api": "^7.1.1"
+    }
   },
   "devDependencies": {
     "electron": "^38.2.2",
     "electron-builder": "^26.0.12",
-    "electron-rebuild": "^3.2.9"
+    "electron-rebuild": "^3.2.9",
+    "sass": "^1.94.0"
   }
 }

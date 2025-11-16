@@ -1098,6 +1098,13 @@ body {
   overflow-y: auto;
   overflow-x: hidden;
 }
+.select-dir .container-folders-dir .body-select-dir .itm .event_folder {
+  width: 100%;
+  padding: 5px;
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+}
 .select-dir .container-folders-dir .body-select-dir .itm {
   width: 100%;
   display: flex;
@@ -1106,20 +1113,6 @@ body {
   cursor: pointer;
   border-radius: 5px;
   margin-bottom: 5px;
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 12px;
-  text-align: left;
-  width: calc(100% - 30px);
-  text-overflow: ellipsis;
-  overflow: hidden;
-  white-space: nowrap;
-}
-.select-dir .container-folders-dir .body-select-dir .itm .event_folder {
-  width: 100%;
-  padding: 5px;
-  display: flex;
-  justify-content: flex-start;
-  align-items: center;
 }
 .select-dir .container-folders-dir .body-select-dir .itm:hover {
   background-color: #444;
@@ -1128,6 +1121,15 @@ body {
   width: 20px;
   height: 20px;
   margin-right: 10px;
+}
+.select-dir .container-folders-dir .body-select-dir .itm {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+  text-align: left;
+  width: calc(100% - 30px);
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
 }
 .select-dir.active {
   display: flex;
@@ -1254,15 +1256,6 @@ body {
               <button class="btn btn-modifier" data-modifier="win">Win</button>
           </div>
   */
-  width: 100%;
-  display: none;
-  background-color: #222;
-  padding: 5px;
-  position: fixed;
-  bottom: 50px;
-  left: 0;
-  box-shadow: 2px 2px 5px #111;
-  z-index: 9999;
 }
 .container-teclados .btn-modifier {
   height: 42px;
@@ -1312,6 +1305,17 @@ body {
   background-color: #555;
   color: #fff;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+.container-teclados {
+  width: 100%;
+  display: none;
+  background-color: #222;
+  padding: 5px;
+  position: fixed;
+  bottom: 50px;
+  left: 0;
+  box-shadow: 2px 2px 5px #111;
+  z-index: 9999;
 }
 .container-teclados .teclado {
   width: 100%;
@@ -1705,3 +1709,5 @@ body {
     transform: rotate(360deg);
   }
 }
+
+/*# sourceMappingURL=index.view.css.map */

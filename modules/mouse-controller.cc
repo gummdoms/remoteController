@@ -1,9 +1,12 @@
 #include <napi.h>
-#include <windows.h>
 #include <algorithm>
 #include <map>
 #include <string>
 #include <vector>
+
+#ifdef _WIN32
+
+#include <windows.h>
 
 namespace
 {
@@ -603,3 +606,585 @@ Napi::Object InitModule(Napi::Env env, Napi::Object exports)
 }
 
 NODE_API_MODULE(mouse_controller, InitModule)
+
+#else // __linux__
+
+#include <X11/Xlib.h>
+#include <X11/Xutil.h>
+#include <X11/extensions/XTest.h>
+#include <X11/keysym.h>
+#include <X11/XKBlib.h>
+#include <X11/XF86keysym.h>
+
+#include <cctype>
+#include <cmath>
+#include <optional>
+#include <unordered_map>
+
+namespace
+{
+    Display *GetDisplay()
+    {
+        static Display *display = []() -> Display *
+        {
+            XInitThreads();
+            return XOpenDisplay(nullptr);
+        }();
+        return display;
+    }
+
+    bool EnsureDisplay(const Napi::Env &env)
+    {
+        if (!GetDisplay())
+        {
+            Napi::Error::New(env, "No se pudo abrir la pantalla X11").ThrowAsJavaScriptException();
+            return false;
+        }
+        return true;
+    }
+
+    std::string Normalize(const std::string &value)
+    {
+        std::string lower = value;
+        std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c)
+                       { return static_cast<char>(std::tolower(c)); });
+        return lower;
+    }
+
+    bool SendKeySym(KeySym keysym, bool keyDown)
+    {
+        Display *display = GetDisplay();
+        if (!display)
+        {
+            return false;
+        }
+
+        KeyCode keycode = XKeysymToKeycode(display, keysym);
+        if (keycode == 0)
+        {
+            return false;
+        }
+
+        XTestFakeKeyEvent(display, keycode, keyDown ? True : False, CurrentTime);
+        XFlush(display);
+        return true;
+    }
+
+    void SendKeySymPress(KeySym keysym)
+    {
+        SendKeySym(keysym, true);
+        SendKeySym(keysym, false);
+    }
+
+    void SendButton(unsigned int button, bool down)
+    {
+        Display *display = GetDisplay();
+        if (!display)
+        {
+            return;
+        }
+        XTestFakeButtonEvent(display, button, down ? True : False, CurrentTime);
+        XFlush(display);
+    }
+
+    const std::unordered_map<std::string, KeySym> SPECIAL_KEY_MAP = {
+        {"backspace", XK_BackSpace}, {"enter", XK_Return}, {"return", XK_Return}, {"space", XK_space}, {"tab", XK_Tab}, {"esc", XK_Escape}, {"escape", XK_Escape}, {"delete", XK_Delete}, {"del", XK_Delete}, {"insert", XK_Insert}, {"home", XK_Home}, {"end", XK_End}, {"pageup", XK_Prior}, {"pagedown", XK_Next}, {"up", XK_Up}, {"down", XK_Down}, {"left", XK_Left}, {"right", XK_Right}, {"capslock", XK_Caps_Lock}, {"numlock", XK_Num_Lock}, {"scrolllock", XK_Scroll_Lock}, {"printscreen", XK_Print}, {"pause", XK_Pause}, {"pausebreak", XK_Pause}, {"f1", XK_F1}, {"f2", XK_F2}, {"f3", XK_F3}, {"f4", XK_F4}, {"f5", XK_F5}, {"f6", XK_F6}, {"f7", XK_F7}, {"f8", XK_F8}, {"f9", XK_F9}, {"f10", XK_F10}, {"f11", XK_F11}, {"f12", XK_F12}, {"media_play", XF86XK_AudioPlay}, {"media_stop", XF86XK_AudioStop}, {"media_next", XF86XK_AudioNext}, {"media_prev", XF86XK_AudioPrev}, {"volume_up", XF86XK_AudioRaiseVolume}, {"volume_down", XF86XK_AudioLowerVolume}, {"volume_mute", XF86XK_AudioMute}, {"lwin", XK_Super_L}, {"rwin", XK_Super_R}, {"win", XK_Super_L}, {"windows", XK_Super_L}, {"super", XK_Super_L}, {"meta", XK_Super_L}, {"ctrl", XK_Control_L}, {"control", XK_Control_L}, {"lctrl", XK_Control_L}, {"rctrl", XK_Control_R}, {"alt", XK_Alt_L}, {"lalt", XK_Alt_L}, {"ralt", XK_Alt_R}, {"shift", XK_Shift_L}, {"lshift", XK_Shift_L}, {"rshift", XK_Shift_R}, {"mayus", XK_Shift_L}};
+
+    bool IsModifier(KeySym keysym)
+    {
+        switch (keysym)
+        {
+        case XK_Shift_L:
+        case XK_Shift_R:
+        case XK_Control_L:
+        case XK_Control_R:
+        case XK_Alt_L:
+        case XK_Alt_R:
+        case XK_Super_L:
+        case XK_Super_R:
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    struct CharMapping
+    {
+        KeySym keysym;
+        bool needsShift;
+    };
+
+    std::optional<CharMapping> LookupChar(char32_t ch)
+    {
+        if (ch >= U'a' && ch <= U'z')
+        {
+            return CharMapping{static_cast<KeySym>(XK_a + (ch - U'a')), false};
+        }
+        if (ch >= U'A' && ch <= U'Z')
+        {
+            return CharMapping{static_cast<KeySym>(XK_a + (ch - U'A')), true};
+        }
+        if (ch >= U'0' && ch <= U'9')
+        {
+            return CharMapping{static_cast<KeySym>(XK_0 + (ch - U'0')), false};
+        }
+
+        switch (ch)
+        {
+        case U' ':
+            return CharMapping{XK_space, false};
+        case U'\n':
+        case U'\r':
+            return CharMapping{XK_Return, false};
+        case U'\t':
+            return CharMapping{XK_Tab, false};
+        case U'-':
+            return CharMapping{XK_minus, false};
+        case U'_':
+            return CharMapping{XK_minus, true};
+        case U'=':
+            return CharMapping{XK_equal, false};
+        case U'+':
+            return CharMapping{XK_equal, true};
+        case U'[':
+            return CharMapping{XK_bracketleft, false};
+        case U'{':
+            return CharMapping{XK_bracketleft, true};
+        case U']':
+            return CharMapping{XK_bracketright, false};
+        case U'}':
+            return CharMapping{XK_bracketright, true};
+        case U';':
+            return CharMapping{XK_semicolon, false};
+        case U':':
+            return CharMapping{XK_semicolon, true};
+        case U'\'':
+            return CharMapping{XK_apostrophe, false};
+        case U'"':
+            return CharMapping{XK_apostrophe, true};
+        case U'`':
+            return CharMapping{XK_grave, false};
+        case U'~':
+            return CharMapping{XK_grave, true};
+        case U',':
+            return CharMapping{XK_comma, false};
+        case U'<':
+            return CharMapping{XK_comma, true};
+        case U'.':
+            return CharMapping{XK_period, false};
+        case U'>':
+            return CharMapping{XK_period, true};
+        case U'/':
+            return CharMapping{XK_slash, false};
+        case U'?':
+            return CharMapping{XK_slash, true};
+        case U'\\':
+            return CharMapping{XK_backslash, false};
+        case U'|':
+            return CharMapping{XK_backslash, true};
+        case U'!':
+            return CharMapping{XK_1, true};
+        case U'@':
+            return CharMapping{XK_2, true};
+        case U'#':
+            return CharMapping{XK_3, true};
+        case U'$':
+            return CharMapping{XK_4, true};
+        case U'%':
+            return CharMapping{XK_5, true};
+        case U'^':
+            return CharMapping{XK_6, true};
+        case U'&':
+            return CharMapping{XK_7, true};
+        case U'*':
+            return CharMapping{XK_8, true};
+        case U'(':
+            return CharMapping{XK_9, true};
+        case U')':
+            return CharMapping{XK_0, true};
+        default:
+            return std::nullopt;
+        }
+    }
+
+    std::vector<char32_t> ToCodepoints(const std::u16string &text)
+    {
+        std::vector<char32_t> codepoints;
+        for (size_t i = 0; i < text.size(); ++i)
+        {
+            char16_t ch = text[i];
+            if (ch >= 0xD800 && ch <= 0xDBFF && i + 1 < text.size())
+            {
+                char16_t low = text[i + 1];
+                if (low >= 0xDC00 && low <= 0xDFFF)
+                {
+                    char32_t cp = ((static_cast<char32_t>(ch - 0xD800) << 10) | (low - 0xDC00)) + 0x10000;
+                    codepoints.push_back(cp);
+                    ++i;
+                    continue;
+                }
+            }
+            codepoints.push_back(ch);
+        }
+        return codepoints;
+    }
+
+    void SendCharacterChar32(char32_t cp)
+    {
+        auto mapping = LookupChar(cp);
+        if (!mapping)
+        {
+            return;
+        }
+
+        if (mapping->needsShift)
+        {
+            SendKeySym(XK_Shift_L, true);
+        }
+        SendKeySymPress(mapping->keysym);
+        if (mapping->needsShift)
+        {
+            SendKeySym(XK_Shift_L, false);
+        }
+    }
+}
+
+Napi::Value MoveMouseRelative(const Napi::CallbackInfo &info)
+{
+    Napi::Env env = info.Env();
+    if (info.Length() < 2)
+    {
+        Napi::TypeError::New(env, "Se requieren 2 argumentos: dx, dy").ThrowAsJavaScriptException();
+        return env.Null();
+    }
+    if (!info[0].IsNumber() || !info[1].IsNumber())
+    {
+        Napi::TypeError::New(env, "Los argumentos deben ser números").ThrowAsJavaScriptException();
+        return env.Null();
+    }
+    if (!EnsureDisplay(env))
+    {
+        return env.Null();
+    }
+
+    int dx = info[0].As<Napi::Number>().Int32Value();
+    int dy = info[1].As<Napi::Number>().Int32Value();
+
+    XTestFakeRelativeMotionEvent(GetDisplay(), dx, dy, CurrentTime);
+    XFlush(GetDisplay());
+    return Napi::Boolean::New(env, true);
+}
+
+Napi::Value GetMousePosition(const Napi::CallbackInfo &info)
+{
+    Napi::Env env = info.Env();
+    if (!EnsureDisplay(env))
+    {
+        return env.Null();
+    }
+
+    Window root = DefaultRootWindow(GetDisplay());
+    Window child;
+    int rootX = 0, rootY = 0;
+    int winX = 0, winY = 0;
+    unsigned int mask = 0;
+
+    if (XQueryPointer(GetDisplay(), root, &root, &child, &rootX, &rootY, &winX, &winY, &mask))
+    {
+        Napi::Object position = Napi::Object::New(env);
+        position.Set("x", Napi::Number::New(env, rootX));
+        position.Set("y", Napi::Number::New(env, rootY));
+        return position;
+    }
+    return env.Null();
+}
+
+Napi::Value Click(const Napi::CallbackInfo &info)
+{
+    Napi::Env env = info.Env();
+    std::string button = "left";
+    if (info.Length() > 0 && info[0].IsString())
+    {
+        button = Normalize(info[0].As<Napi::String>().Utf8Value());
+    }
+
+    unsigned int btn = 1;
+    if (button == "left")
+    {
+        btn = 1;
+    }
+    else if (button == "right")
+    {
+        btn = 3;
+    }
+    else if (button == "middle")
+    {
+        btn = 2;
+    }
+    else
+    {
+        Napi::TypeError::New(env, "Botón inválido. Use: left, right, middle").ThrowAsJavaScriptException();
+        return env.Null();
+    }
+
+    SendButton(btn, true);
+    SendButton(btn, false);
+    return Napi::Boolean::New(env, true);
+}
+
+Napi::Value DoubleClick(const Napi::CallbackInfo &info)
+{
+    Click(info);
+    Click(info);
+    return Napi::Boolean::New(info.Env(), true);
+}
+
+Napi::Value Scroll(const Napi::CallbackInfo &info)
+{
+    Napi::Env env = info.Env();
+    if (info.Length() < 1 || !info[0].IsNumber())
+    {
+        Napi::TypeError::New(env, "Se requiere un argumento numérico (delta)").ThrowAsJavaScriptException();
+        return env.Null();
+    }
+
+    int delta = info[0].As<Napi::Number>().Int32Value();
+    int steps = std::clamp(delta, -120, 120) / 40;
+    if (steps == 0)
+    {
+        steps = (delta > 0) ? 1 : (delta < 0 ? -1 : 0);
+    }
+
+    if (steps == 0)
+    {
+        return Napi::Boolean::New(env, true);
+    }
+
+    unsigned int button = steps > 0 ? 4 : 5;
+    for (int i = 0; i < std::abs(steps); ++i)
+    {
+        SendButton(button, true);
+        SendButton(button, false);
+    }
+    return Napi::Boolean::New(env, true);
+}
+
+Napi::Value MouseDown(const Napi::CallbackInfo &info)
+{
+    Napi::Env env = info.Env();
+    std::string button = "left";
+    if (info.Length() > 0 && info[0].IsString())
+    {
+        button = Normalize(info[0].As<Napi::String>().Utf8Value());
+    }
+    unsigned int btn = button == "right" ? 3 : button == "middle" ? 2
+                                                                  : 1;
+    SendButton(btn, true);
+    return Napi::Boolean::New(env, true);
+}
+
+Napi::Value MouseUp(const Napi::CallbackInfo &info)
+{
+    Napi::Env env = info.Env();
+    std::string button = "left";
+    if (info.Length() > 0 && info[0].IsString())
+    {
+        button = Normalize(info[0].As<Napi::String>().Utf8Value());
+    }
+    unsigned int btn = button == "right" ? 3 : button == "middle" ? 2
+                                                                  : 1;
+    SendButton(btn, false);
+    return Napi::Boolean::New(env, true);
+}
+
+KeySym ResolveKeySym(const std::string &key)
+{
+    auto it = SPECIAL_KEY_MAP.find(key);
+    if (it != SPECIAL_KEY_MAP.end())
+    {
+        return it->second;
+    }
+    if (key.size() == 1)
+    {
+        char ch = key[0];
+        if (ch >= 'a' && ch <= 'z')
+        {
+            return XK_a + (ch - 'a');
+        }
+        if (ch >= '0' && ch <= '9')
+        {
+            return XK_0 + (ch - '0');
+        }
+    }
+    return NoSymbol;
+}
+
+void HandleKeyEvent(const std::string &key, bool keyDown)
+{
+    KeySym keysym = ResolveKeySym(key);
+    if (keysym != NoSymbol)
+    {
+        SendKeySym(keysym, keyDown);
+    }
+    else if (key.size() == 1)
+    {
+        auto mapping = LookupChar(static_cast<unsigned char>(key[0]));
+        if (mapping)
+        {
+            if (keyDown)
+            {
+                if (mapping->needsShift)
+                {
+                    SendKeySym(XK_Shift_L, true);
+                }
+                SendKeySym(mapping->keysym, true);
+            }
+            else
+            {
+                SendKeySym(mapping->keysym, false);
+                if (mapping->needsShift)
+                {
+                    SendKeySym(XK_Shift_L, false);
+                }
+            }
+        }
+    }
+}
+
+Napi::Value KeyTap(const Napi::CallbackInfo &info)
+{
+    Napi::Env env = info.Env();
+    if (info.Length() < 1 || !info[0].IsString())
+    {
+        Napi::TypeError::New(env, "Se requiere un string que identifique la tecla").ThrowAsJavaScriptException();
+        return env.Null();
+    }
+
+    std::string key = Normalize(info[0].As<Napi::String>().Utf8Value());
+    KeySym keysym = ResolveKeySym(key);
+    if (keysym == NoSymbol)
+    {
+        Napi::TypeError::New(env, "Tecla especial desconocida").ThrowAsJavaScriptException();
+        return env.Null();
+    }
+
+    SendKeySymPress(keysym);
+    return Napi::Boolean::New(env, true);
+}
+
+Napi::Value KeyDown(const Napi::CallbackInfo &info)
+{
+    Napi::Env env = info.Env();
+    if (info.Length() < 1 || !info[0].IsString())
+    {
+        Napi::TypeError::New(env, "Se requiere un string que identifique la tecla").ThrowAsJavaScriptException();
+        return env.Null();
+    }
+    std::string key = Normalize(info[0].As<Napi::String>().Utf8Value());
+    HandleKeyEvent(key, true);
+    return Napi::Boolean::New(env, true);
+}
+
+Napi::Value KeyUp(const Napi::CallbackInfo &info)
+{
+    Napi::Env env = info.Env();
+    if (info.Length() < 1 || !info[0].IsString())
+    {
+        Napi::TypeError::New(env, "Se requiere un string que identifique la tecla").ThrowAsJavaScriptException();
+        return env.Null();
+    }
+    std::string key = Normalize(info[0].As<Napi::String>().Utf8Value());
+    HandleKeyEvent(key, false);
+    return Napi::Boolean::New(env, true);
+}
+
+Napi::Value TypeText(const Napi::CallbackInfo &info)
+{
+    Napi::Env env = info.Env();
+    if (info.Length() < 1 || !info[0].IsString())
+    {
+        Napi::TypeError::New(env, "Se requiere un string").ThrowAsJavaScriptException();
+        return env.Null();
+    }
+
+    std::u16string text = info[0].As<Napi::String>().Utf16Value();
+    for (char32_t cp : ToCodepoints(text))
+    {
+        SendCharacterChar32(cp);
+    }
+    return Napi::Boolean::New(env, true);
+}
+
+Napi::Value KeyCombo(const Napi::CallbackInfo &info)
+{
+    Napi::Env env = info.Env();
+    if (info.Length() < 1 || !info[0].IsArray())
+    {
+        Napi::TypeError::New(env, "Se requiere un arreglo de teclas").ThrowAsJavaScriptException();
+        return env.Null();
+    }
+    Napi::Array arr = info[0].As<Napi::Array>();
+    std::vector<KeySym> modifiers;
+    std::vector<KeySym> presses;
+
+    for (uint32_t i = 0; i < arr.Length(); ++i)
+    {
+        Napi::Value value = arr[i];
+        if (!value.IsString())
+        {
+            continue;
+        }
+        std::string key = Normalize(value.As<Napi::String>().Utf8Value());
+        KeySym keysym = ResolveKeySym(key);
+        if (keysym == NoSymbol)
+        {
+            continue;
+        }
+        if (IsModifier(keysym))
+        {
+            if (std::find(modifiers.begin(), modifiers.end(), keysym) == modifiers.end())
+            {
+                modifiers.push_back(keysym);
+            }
+        }
+        else
+        {
+            presses.push_back(keysym);
+        }
+    }
+
+    for (KeySym mod : modifiers)
+    {
+        SendKeySym(mod, true);
+    }
+    for (KeySym key : presses)
+    {
+        SendKeySymPress(key);
+    }
+    for (auto it = modifiers.rbegin(); it != modifiers.rend(); ++it)
+    {
+        SendKeySym(*it, false);
+    }
+    return Napi::Boolean::New(env, true);
+}
+
+Napi::Object InitModule(Napi::Env env, Napi::Object exports)
+{
+    exports.Set("moveRelative", Napi::Function::New(env, MoveMouseRelative));
+    exports.Set("getPosition", Napi::Function::New(env, GetMousePosition));
+    exports.Set("click", Napi::Function::New(env, Click));
+    exports.Set("doubleClick", Napi::Function::New(env, DoubleClick));
+    exports.Set("scroll", Napi::Function::New(env, Scroll));
+    exports.Set("mouseDown", Napi::Function::New(env, MouseDown));
+    exports.Set("mouseUp", Napi::Function::New(env, MouseUp));
+    exports.Set("typeText", Napi::Function::New(env, TypeText));
+    exports.Set("keyTap", Napi::Function::New(env, KeyTap));
+    exports.Set("keyDown", Napi::Function::New(env, KeyDown));
+    exports.Set("keyUp", Napi::Function::New(env, KeyUp));
+    exports.Set("keyCombo", Napi::Function::New(env, KeyCombo));
+    return exports;
+}
+
+NODE_API_MODULE(mouse_controller, InitModule)
+
+#endif
