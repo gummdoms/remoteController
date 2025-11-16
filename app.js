@@ -2,7 +2,7 @@ const { app, BrowserWindow, ipcMain, Tray, Menu, dialog, shell } = require('elec
 const express = require('express');
 const bodyParser = require('body-parser');
 const path = require('path');
-const { exec, execFile } = require('child_process');
+const { exec, execFile, execSync } = require('child_process');
 const asyncQueue = require('async'); // Para manejar la cola de tareas
 const fs = require('fs');
 let robot = null;
@@ -22,6 +22,8 @@ const displayMode = require('./platform/displayMode');
 
 const isWindows = process.platform === 'win32';
 const isLinux = process.platform === 'linux';
+const currentDesktop = (process.env.XDG_CURRENT_DESKTOP || process.env.DESKTOP_SESSION || '').toLowerCase();
+const isKDE = isLinux && /kde|plasma/.test(currentDesktop);
 
 const ALERT_THRESHOLD_MS = 5 * 60 * 1000;
 const hasRobotFallback = () => Boolean(robot);
@@ -70,6 +72,18 @@ const parseBoolean = (value) => {
     }
     return Boolean(value);
 };
+const commandExists = (binary) => {
+    if (!binary) {
+        return false;
+    }
+    try {
+        execSync(`command -v ${binary}`, { stdio: 'ignore' });
+        return true;
+    } catch (error) {
+        return false;
+    }
+};
+
 const modeToLegacyCode = (mode) => {
     const mapping = {
         internal: '4500',
@@ -79,18 +93,32 @@ const modeToLegacyCode = (mode) => {
     };
     return mapping[mode] || null;
 };
-function buildLinuxLogoutCommand() {
+function buildLinuxLogoutCommands() {
     if (!isLinux) {
-        return null;
+        return [];
     }
+    const commands = [];
+    if (isKDE) {
+        const kdeBinary = ['qdbus6', 'qdbus'].find(commandExists);
+        if (kdeBinary) {
+            commands.push(
+                `${kdeBinary} org.kde.ksmserver /KSMServer org.kde.KSMServerInterface.logout 0 0 0`,
+                `${kdeBinary} org.kde.ksmserver /KSMServer logout 0 0 0`,
+                `${kdeBinary} org.kde.LogoutPrompt /LogoutPrompt logout`
+            );
+        }
+    }
+
     if (process.env.XDG_SESSION_ID) {
-        return `loginctl terminate-session ${process.env.XDG_SESSION_ID}`;
+        commands.push(`loginctl terminate-session ${process.env.XDG_SESSION_ID}`);
     }
     const user = process.env.USER || process.env.LOGNAME;
     if (user) {
-        return `loginctl terminate-user ${user}`;
+        commands.push(`loginctl terminate-user ${user}`);
+    } else {
+        commands.push('loginctl terminate-user $(id -un)');
     }
-    return 'loginctl terminate-user $(id -un)';
+    return commands;
 }
 
 const powerActionMap = {
@@ -108,7 +136,7 @@ const powerActionMap = {
     },
     logout: {
         win32: 'shutdown /l',
-        linux: buildLinuxLogoutCommand
+        linux: buildLinuxLogoutCommands
     }
 };
 
@@ -118,37 +146,55 @@ function getPowerCommand(action) {
         return null;
     }
     const value = isWindows ? entry.win32 : isLinux ? entry.linux : null;
-    if (typeof value === 'function') {
-        return value();
+    const resolved = typeof value === 'function' ? value() : value;
+    if (Array.isArray(resolved)) {
+        return resolved.filter(Boolean);
     }
-    return value || null;
+    return resolved || null;
 }
 
-function runPowerCommand(action, label = action) {
-    const command = getPowerCommand(action);
-    if (!command) {
-        throw new Error(`La acción "${label}" no está soportada en este sistema.`);
-    }
-    const child = exec(command, (error, stdout, stderr) => {
-        if (error) {
-            console.error(`Error al ejecutar ${label}:`, error);
-        }
-        if (stderr) {
-            console.error(`stderr ${label}:`, stderr);
-        }
-        if (stdout) {
-            console.log(`stdout ${label}:`, stdout);
+function execCommandPromise(command, label) {
+    return new Promise((resolve, reject) => {
+        const child = exec(command, (error, stdout, stderr) => {
+            if (error) {
+                return reject(error);
+            }
+            if (stderr) {
+                console.error(`stderr ${label}:`, stderr);
+            }
+            if (stdout) {
+                console.log(`stdout ${label}:`, stdout);
+            }
+            resolve();
+        });
+        if (child && typeof child.unref === 'function') {
+            child.unref();
         }
     });
-    if (child && typeof child.unref === 'function') {
-        child.unref();
-    }
-    return child;
 }
 
-function handlePowerRequest(action, res, label) {
+async function runPowerCommand(action, label = action) {
+    const command = getPowerCommand(action);
+    if (!command || (Array.isArray(command) && !command.length)) {
+        throw new Error(`La acción "${label}" no está soportada en este sistema.`);
+    }
+    const commands = Array.isArray(command) ? command : [command];
+    let lastError = null;
+    for (const cmd of commands) {
+        try {
+            await execCommandPromise(cmd, label);
+            return;
+        } catch (error) {
+            lastError = error;
+            console.error(`Error al ejecutar ${label} con "${cmd}":`, error.message);
+        }
+    }
+    throw lastError || new Error(`No se pudo ejecutar la acción "${label}".`);
+}
+
+async function handlePowerRequest(action, res, label) {
     try {
-        runPowerCommand(action, label);
+        await runPowerCommand(action, label);
         res.send({ status: 'executing', action, platform: process.platform });
     } catch (error) {
         const status = /no está soportada/i.test(error.message) ? 501 : 500;
@@ -302,11 +348,9 @@ function scheduleSystemShutdown(targetDate) {
 
     scheduledShutdownTimer = setTimeout(() => {
         console.log('Ejecutando apagado programado');
-        try {
-            runPowerCommand('shutdown', 'apagado programado');
-        } catch (error) {
+        runPowerCommand('shutdown', 'apagado programado').catch((error) => {
             console.error('Error al ejecutar apagado programado:', error);
-        }
+        });
         clearScheduledShutdown();
     }, delay);
 }
