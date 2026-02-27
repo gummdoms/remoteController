@@ -12,14 +12,9 @@
 
 #ifndef DWMWA_WINDOW_CORNER_PREFERENCE
 #define DWMWA_WINDOW_CORNER_PREFERENCE 33
-typedef enum _DWM_WINDOW_CORNER_PREFERENCE
-{
-    DWMWCP_DEFAULT = 0,
-    DWMWCP_DONOTROUND = 1,
-    DWMWCP_ROUND = 2,
-    DWMWCP_ROUNDSMALL = 3
-} DWM_WINDOW_CORNER_PREFERENCE;
 #endif
+
+constexpr DWORD kDwmwcpRound = 2;
 
 #ifndef DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
 #define DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 ((DPI_AWARENESS_CONTEXT) - 4)
@@ -148,7 +143,7 @@ namespace
         SetWindowLongPtr(hwnd, GWL_EXSTYLE, exStyle);
         SetLayeredWindowAttributes(hwnd, 0, 245, LWA_ALPHA);
 
-        const DWM_WINDOW_CORNER_PREFERENCE preference = DWMWCP_ROUND;
+        const DWORD preference = kDwmwcpRound;
         DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &preference, sizeof(preference));
 
         const MARGINS margins = {0, 0, 0, 0};

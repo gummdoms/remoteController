@@ -817,6 +817,8 @@ const SPECIAL_KEYS = new Set([
     'backspace', 'enter', 'return', 'space', 'tab', 'esc', 'escape',
     'insert', 'delete', 'del', 'home', 'end', 'pageup', 'pagedown',
     'up', 'down', 'left', 'right', 'capslock', 'numlock', 'scrolllock',
+    'numpad0', 'numpad1', 'numpad2', 'numpad3', 'numpad4',
+    'numpad5', 'numpad6', 'numpad7', 'numpad8', 'numpad9',
     'printscreen', 'pause', 'pausebreak',
     'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'f9', 'f10', 'f11', 'f12',
     'media_play', 'media_stop', 'media_next', 'media_prev',
@@ -848,6 +850,16 @@ const ROBOT_KEY_ALIASES = new Map([
     ['lshift', 'shift'],
     ['rshift', 'shift'],
     ['mayus', 'shift'],
+    ['numpad0', 'numpad_0'],
+    ['numpad1', 'numpad_1'],
+    ['numpad2', 'numpad_2'],
+    ['numpad3', 'numpad_3'],
+    ['numpad4', 'numpad_4'],
+    ['numpad5', 'numpad_5'],
+    ['numpad6', 'numpad_6'],
+    ['numpad7', 'numpad_7'],
+    ['numpad8', 'numpad_8'],
+    ['numpad9', 'numpad_9'],
     ['pausebreak', 'pause']
 ]);
 

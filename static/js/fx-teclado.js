@@ -255,19 +255,19 @@ function teclado_only_numeric() {
                     </div>
                     <div class="content-center">
                         <div class="row-teclado">
-                            <button class="btn btn-teclado" data-key="1">1</button>
-                            <button class="btn btn-teclado" data-key="2">2</button>
-                            <button class="btn btn-teclado" data-key="3">3</button>
+                            <button class="btn btn-teclado" data-key="numpad1">1</button>
+                            <button class="btn btn-teclado" data-key="numpad2">2</button>
+                            <button class="btn btn-teclado" data-key="numpad3">3</button>
                         </div>
                         <div class="row-teclado">
-                            <button class="btn btn-teclado" data-key="4">4</button>
-                            <button class="btn btn-teclado" data-key="5">5</button>
-                            <button class="btn btn-teclado" data-key="6">6</button>
+                            <button class="btn btn-teclado" data-key="numpad4">4</button>
+                            <button class="btn btn-teclado" data-key="numpad5">5</button>
+                            <button class="btn btn-teclado" data-key="numpad6">6</button>
                         </div>
                         <div class="row-teclado">
-                            <button class="btn btn-teclado" data-key="7">7</button>
-                            <button class="btn btn-teclado" data-key="8">8</button>
-                            <button class="btn btn-teclado" data-key="9">9</button>
+                            <button class="btn btn-teclado" data-key="numpad7">7</button>
+                            <button class="btn btn-teclado" data-key="numpad8">8</button>
+                            <button class="btn btn-teclado" data-key="numpad9">9</button>
                         </div>
                     </div>
                     <div class="content-right">
@@ -284,7 +284,7 @@ function teclado_only_numeric() {
                     <button class="btn btn-abc">ABC</button>
                     <button class="btn btn-teclado" data-key=",">,</button>
                     <button class="btn btn-number">!?#</button>
-                    <button class="btn btn-teclado btn-cero" data-key="0">0</button>
+                    <button class="btn btn-teclado btn-cero" data-key="numpad0">0</button>
                     <button class="btn btn-teclado" data-key="=">=</button>
                     <button class="btn btn-teclado" data-key=".">.</button>
                     <button class="btn btn-teclado enter" data-key="enter" data-hold="true">

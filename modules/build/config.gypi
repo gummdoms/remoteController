@@ -15,7 +15,9 @@
     "default_configuration": "Release",
     "defines": [],
     "include_dirs": [],
-    "libraries": []
+    "libraries": [],
+    "msbuild_toolset": "v143",
+    "msvs_windows_target_platform_version": "10.0.26100.0"
   },
   "variables": {
     "asan": 0,
@@ -495,18 +497,22 @@
     "v8_trace_maps": 0,
     "v8_use_siphash": 1,
     "want_separate_host_toolset": 0,
-    "nodedir": "/home/bjrzum/.cache/node-gyp/22.21.1",
-    "python": "/usr/bin/python3",
+    "nodedir": "C:\\Users\\Damar\\.node-gyp\\22.21.1\\node-v22.21.1",
+    "python": "C:\\Users\\Damar\\AppData\\Local\\Python\\pythoncore-3.14-64\\python.exe",
     "standalone_static_library": 1,
-    "global_prefix": "/home/bjrzum/.nvm/versions/node/v22.21.1",
-    "node_gyp": "/home/bjrzum/.nvm/versions/node/v22.21.1/lib/node_modules/npm/node_modules/node-gyp/bin/node-gyp.js",
-    "user_agent": "npm/10.9.4 node/v22.21.1 linux x64 workspaces/false",
-    "prefix": "/home/bjrzum/.nvm/versions/node/v22.21.1",
+    "msbuild_path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\MSBuild\\Current\\Bin\\MSBuild.exe",
+    "user_agent": "npm/10.9.4 node/v22.21.1 win32 x64 workspaces/false",
+    "userconfig": "C:\\Users\\Damar\\.npmrc",
+    "prefix": "C:\\Program Files\\nodejs",
     "npm_version": "10.9.4",
-    "init_module": "/home/bjrzum/.npm-init.js",
-    "globalconfig": "/home/bjrzum/.nvm/versions/node/v22.21.1/etc/npmrc",
-    "local_prefix": "/mnt/Workspace/Documents/2. Proyectos/finish/EJS-remoteControllers/DesktopApp/modules",
-    "cache": "/home/bjrzum/.npm",
-    "userconfig": "/home/bjrzum/.npmrc"
+    "node_gyp": "C:\\Users\\Damar\\AppData\\Local\\nvm\\v22.21.1\\node_modules\\npm\\node_modules\\node-gyp\\bin\\node-gyp.js",
+    "local_prefix": "D:\\Documents\\2. Proyectos\\finish\\EJS-remoteControllers\\DesktopApp\\modules",
+    "init_module": "C:\\Users\\Damar\\.npm-init.js",
+    "global_prefix": "C:\\Program Files\\nodejs",
+    "globalconfig": "C:\\Program Files\\nodejs\\etc\\npmrc",
+    "fetch_retry_mintimeout": "20000",
+    "fetch_retry_maxtimeout": "120000",
+    "fetch_retries": "5",
+    "cache": "C:\\Users\\Damar\\AppData\\Local\\npm-cache"
   }
 }
