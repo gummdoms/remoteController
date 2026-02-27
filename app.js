@@ -1,6 +1,5 @@
 const { app, BrowserWindow, ipcMain, Tray, Menu, dialog, shell } = require('electron');
 const express = require('express');
-const bodyParser = require('body-parser');
 const path = require('path');
 const { exec, execFile, execSync } = require('child_process');
 const asyncQueue = require('async'); // Para manejar la cola de tareas
@@ -519,10 +518,19 @@ ipcMain.on('toggleMaximize', () => {
     }
 });
 const server = express();
+const REQUEST_BODY_LIMIT = '10mb';
 server.use(cors()); // Usa cors para habilitar CORS en todas las rutas
-server.use(bodyParser.urlencoded({ extended: true }));
-server.use(bodyParser.json());
-server.use(express.json());
+server.use(express.urlencoded({ extended: true, limit: REQUEST_BODY_LIMIT }));
+server.use(express.json({ limit: REQUEST_BODY_LIMIT }));
+server.use((err, req, res, next) => {
+    if (err && (err.type === 'entity.too.large' || err.status === 413)) {
+        return res.status(413).send({
+            error: 'El tamaño de la solicitud es demasiado grande',
+            limit: REQUEST_BODY_LIMIT
+        });
+    }
+    next(err);
+});
 server.listen(4800, () => {
     console.log('Servidor en el puerto 4800');
 });
@@ -1089,20 +1097,54 @@ function leer_directorio(directorio, ignorar = []) {
     return html;
 }
 
+function getWindowsDrives() {
+    try {
+        const stdout = execSync(
+            'powershell -NoProfile -Command "Get-PSDrive -PSProvider FileSystem | Select-Object -ExpandProperty Root"',
+            { encoding: 'utf8' }
+        );
+
+        const drives = stdout
+            .split(/\r?\n/)
+            .map(value => value.trim())
+            .filter(value => /^[A-Za-z]:\\?$/.test(value))
+            .map(value => value.replace(/\\$/, ''));
+
+        if (drives.length) {
+            return Array.from(new Set(drives));
+        }
+    } catch (error) {
+        console.error('Error al listar discos con PowerShell:', error.message);
+    }
+
+    const fallback = [];
+    for (let code = 65; code <= 90; code += 1) {
+        const drive = `${String.fromCharCode(code)}:`;
+        if (fs.existsSync(`${drive}\\`)) {
+            fallback.push(drive);
+        }
+    }
+    return fallback;
+}
+
 server.get('/leerDirectorio', (req, res) => {
     let dirPath = req.query.path;
     if (dirPath === '/') {
-        // Listar discos en Windows
-        exec('wmic logicaldisk get name', (error, stdout, stderr) => {
-            if (error) {
-                console.error('Error al listar discos:', error);
-                res.status(500).send('Error al listar discos');
-                return;
+        if (isWindows) {
+            const drives = getWindowsDrives();
+            if (!drives.length) {
+                return res.status(500).send('Error al listar discos');
             }
-            const drives = stdout.split('\r\r\n').filter(value => /[A-Za-z]:/.test(value));
-            let data = drives.map(drive => f_html('folder', drive.trim(), drive.trim() + '/')).join('');
-            res.send(data);
-        });
+            const data = drives.map(drive => f_html('folder', drive, `${drive}/`)).join('');
+            return res.send(data);
+        }
+
+        if (!fs.existsSync('/')) {
+            return res.status(404).send('El directorio no existe');
+        }
+
+        const data = leer_directorio('/');
+        return res.send(data);
     } else if (fs.existsSync(dirPath)) {
         if (fs.statSync(dirPath).isDirectory()) {
             let data = leer_directorio(dirPath);
@@ -1114,6 +1156,118 @@ server.get('/leerDirectorio', (req, res) => {
         res.status(404).send('El directorio no existe');
     }
 });
+
+function listDirectoryEntries(dirPath) {
+    const entries = [];
+    const directoryItems = fs.readdirSync(dirPath, { withFileTypes: true });
+
+    for (const item of directoryItems) {
+        const absolutePath = path.join(dirPath, item.name);
+        entries.push({
+            name: item.name,
+            path: absolutePath,
+            type: item.isDirectory() ? 'folder' : 'file'
+        });
+    }
+
+    entries.sort((a, b) => {
+        if (a.type !== b.type) {
+            return a.type === 'folder' ? -1 : 1;
+        }
+        return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+    });
+
+    return entries;
+}
+
+server.get('/leerDirectorioTransfer', (req, res) => {
+    const requestedPath = typeof req.query.path === 'string' ? req.query.path : '/';
+
+    if (requestedPath === '/') {
+        if (isWindows) {
+            const drives = getWindowsDrives();
+            if (!drives.length) {
+                return res.status(500).send({ error: 'Error al listar discos' });
+            }
+
+            const entries = drives.map(drive => ({
+                name: drive,
+                path: `${drive}${path.sep}`,
+                type: 'folder'
+            }));
+
+            return res.send({
+                currentPath: '/',
+                parentPath: null,
+                entries
+            });
+        }
+
+        if (!fs.existsSync('/')) {
+            return res.status(404).send({ error: 'El directorio no existe' });
+        }
+
+        try {
+            const entries = listDirectoryEntries('/');
+            return res.send({
+                currentPath: '/',
+                parentPath: null,
+                entries
+            });
+        } catch (error) {
+            console.error('Error al leer el directorio raíz:', error);
+            return res.status(500).send({ error: 'Error al leer el directorio' });
+        }
+    }
+
+    if (!fs.existsSync(requestedPath)) {
+        return res.status(404).send({ error: 'El directorio no existe' });
+    }
+
+    if (!fs.statSync(requestedPath).isDirectory()) {
+        return res.status(400).send({ error: 'No es un directorio' });
+    }
+
+    try {
+        const entries = listDirectoryEntries(requestedPath);
+        const normalizedPath = path.normalize(requestedPath);
+        const parentPath = path.dirname(normalizedPath);
+        const hasParent = parentPath && parentPath !== normalizedPath;
+
+        return res.send({
+            currentPath: requestedPath,
+            parentPath: hasParent ? parentPath : null,
+            entries
+        });
+    } catch (error) {
+        console.error('Error al leer el directorio para transferencia:', error);
+        return res.status(500).send({ error: 'Error al leer el directorio' });
+    }
+});
+
+server.get('/descargarArchivo', (req, res) => {
+    const filePath = typeof req.query.path === 'string' ? req.query.path : '';
+
+    if (!filePath) {
+        return res.status(400).send({ error: 'La ruta del archivo es requerida' });
+    }
+
+    if (!fs.existsSync(filePath)) {
+        return res.status(404).send({ error: 'El archivo no existe' });
+    }
+
+    if (!fs.statSync(filePath).isFile()) {
+        return res.status(400).send({ error: 'La ruta no corresponde a un archivo' });
+    }
+
+    return res.download(filePath, path.basename(filePath), (error) => {
+        if (error && !res.headersSent) {
+            console.error('Error al descargar archivo:', error);
+            res.status(500).send({ error: 'No se pudo descargar el archivo' });
+        }
+    });
+});
+
 function mover_archivo(archivo, destino) {
     fs.rename(archivo, path.join(destino, path.basename(archivo)), (error) => {
         if (error) {

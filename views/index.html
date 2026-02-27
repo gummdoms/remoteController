@@ -78,6 +78,11 @@
                         <i class="bi bi-eye"></i>
                         <span class="text-pc">Mostrar</span>
                     </button>
+                    <!-- Boton de transferir archivos -->
+                    <button class="btn btn-primary btn-pc" id="app-transferir-archivos" title="Transferir archivos">
+                        <i class="bi bi-file-earmark-arrow-up"></i>
+                        <span class="text-pc">Transferir</span>
+                    </button>
                     <!-- boton para programar apagdo -->
                     <button class="btn btn-primary btn-pc" id="app-programar-apagado" title="Programar apagado">
                         <i class="bi bi-clock"></i>
@@ -213,6 +218,29 @@
             </div>
         </div>
     </aside>
+
+    <aside class="modal-transfer" id="modal-transfer">
+        <div class="transfer-panel">
+            <div class="transfer-header">
+                <button class="btn-transfer-back" id="transfer-back" title="Regresar carpeta">
+                    <i class="bi bi-arrow-left"></i>
+                </button>
+                <button class="btn-transfer-close" id="transfer-close" title="Cerrar">
+                    <i class="bi bi-x"></i>
+                </button>
+            </div>
+            <div class="transfer-body" id="transfer-body"></div>
+            <div class="transfer-path-box">
+                <input type="text" id="transfer-current-path" readonly placeholder="Ruta seleccionada">
+            </div>
+            <div class="transfer-footer">
+                <button class="btn-transfer-select" id="transfer-select-files">Seleccionar ficheros</button>
+                <button class="btn-transfer-cancel" id="transfer-cancel">Cancelar</button>
+            </div>
+            <input type="file" id="transfer-file-input" multiple hidden>
+        </div>
+    </aside>
+
     <aside class="modal-add-app">
         <div class="container-add-app">
             <div class="header-modal">
@@ -247,7 +275,6 @@
                 </div>
             </div>
             <div class="footer-modal">
-                <button class="btn btn-primary btn-transferir" id="btn-transferir">Transferir</button>
                 <button class="btn btn-primary btn-add-app" id="add-app">Agregar</button>
                 <button class="btn btn-primary btn-cancel" id="cancel-add-app">Cancelar</button>
             </div>
@@ -287,6 +314,7 @@
     <script src="/static/js/teclado.js"></script>
     <script src="/static/js/index.js"></script>
     <script src="/static/js/controller_app.js"></script>
+    <script src="/static/js/transfer.js"></script>
     <script src="/static/js/powerOff.js"></script>
     <script src="/static/js/mouse.config.js"></script>
 
