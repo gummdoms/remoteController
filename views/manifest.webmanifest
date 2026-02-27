@@ -1,0 +1,26 @@
+{
+    "name": "Remote Controllers",
+    "short_name": "RemoteCtrl",
+    "description": "Control remoto de PC desde el móvil",
+    "lang": "es-CO",
+    "start_url": "/",
+    "scope": "/",
+    "display": "standalone",
+    "orientation": "portrait",
+    "background_color": "#222222",
+    "theme_color": "#222222",
+    "icons": [
+        {
+            "src": "/static/img/pwa-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any maskable"
+        },
+        {
+            "src": "/static/img/pwa-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any maskable"
+        }
+    ]
+}
