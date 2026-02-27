@@ -83,6 +83,11 @@
                         <i class="bi bi-eye"></i>
                         <span class="text-pc">Mostrar</span>
                     </button>
+
+                </div>
+            </section>
+            <section class="container-modules container-modules-3">
+                <div class="app-container">
                     <!-- Boton de transferir archivos -->
                     <button class="btn btn-primary btn-pc" id="app-transferir-archivos" title="Transferir archivos">
                         <i class="bi bi-file-earmark-arrow-up"></i>
@@ -92,6 +97,10 @@
                     <button class="btn btn-primary btn-pc" id="app-programar-apagado" title="Programar apagado">
                         <i class="bi bi-clock"></i>
                         <span class="text-pc">Programar</span>
+                    </button>
+                    <button class="btn btn-primary btn-pc" id="app-certificado" title="Certificado HTTPS">
+                        <i class="bi bi-shield-lock"></i>
+                        <span class="text-pc">Cert</span>
                     </button>
                 </div>
             </section>
@@ -250,6 +259,31 @@
         </div>
     </aside>
 
+    <aside class="modal-cert-manager" id="modal-cert-manager">
+        <div class="container-cert-manager">
+            <div class="header-modal cert-header">
+                <h3>Certificado HTTPS</h3>
+                <button class="btn-close-modal-cert" id="close-modal-cert" title="Cerrar">
+                    <i class="bi bi-x"></i>
+                </button>
+            </div>
+            <div class="body-modal cert-body">
+                <p class="cert-status" id="cert-status">Cargando estado del certificado...</p>
+                <p class="cert-endpoint" id="cert-https-url"></p>
+                <p class="cert-help">Escanea este QR con el móvil para descargar e instalar la CA raíz:</p>
+                <div class="cert-qr-box">
+                    <img id="cert-qr-image" alt="QR certificado" />
+                </div>
+                <a id="cert-download-link" class="cert-download-link" target="_blank"
+                    rel="noopener noreferrer">Descargar rootCA.crt</a>
+            </div>
+            <div class="footer-modal cert-footer">
+                <button class="btn btn-primary" id="regenerate-cert">Regenerar certificado</button>
+                <button class="btn btn-primary btn-cancel" id="cancel-cert-modal">Cerrar</button>
+            </div>
+        </div>
+    </aside>
+
     <aside class="modal-add-app">
         <div class="container-add-app">
             <div class="header-modal">
@@ -325,6 +359,7 @@
     <script src="/static/js/controller_app.js"></script>
     <script src="/static/js/transfer.js"></script>
     <script src="/static/js/voice-dictation.js"></script>
+    <script src="/static/js/cert-manager.js"></script>
     <script src="/static/js/pwa.js"></script>
     <script src="/static/js/powerOff.js"></script>
     <script src="/static/js/mouse.config.js"></script>

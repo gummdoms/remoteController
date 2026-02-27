@@ -1348,6 +1348,103 @@ body {
   padding-top: 35px;
 }
 
+.modal-cert-manager {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.6);
+  z-index: 100001;
+  display: none;
+  justify-content: center;
+  padding: 10px;
+  padding-top: 35px;
+}
+
+.modal-cert-manager.active {
+  display: flex;
+}
+
+.modal-cert-manager .container-cert-manager {
+  width: 100%;
+  max-width: 500px;
+  background-color: #333;
+  border-radius: 5px;
+  box-shadow: 0px 2px 5px #111;
+  height: max-content;
+}
+
+.modal-cert-manager .cert-header {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: #222;
+  padding: 8px 10px;
+}
+
+.modal-cert-manager .cert-header h3 {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 15px;
+}
+
+.modal-cert-manager .cert-header .btn-close-modal-cert {
+  width: 30px;
+  height: 30px;
+  border-radius: 5px;
+  border: none;
+  background-color: #d9534f;
+  cursor: pointer;
+}
+
+.modal-cert-manager .cert-header .btn-close-modal-cert i {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 20px;
+}
+
+.modal-cert-manager .cert-body {
+  padding: 12px;
+}
+
+.modal-cert-manager .cert-body .cert-status,
+.modal-cert-manager .cert-body .cert-endpoint,
+.modal-cert-manager .cert-body .cert-help {
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.modal-cert-manager .cert-body .cert-qr-box {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.modal-cert-manager .cert-body .cert-qr-box img {
+  width: 220px;
+  height: 220px;
+  background: #fff;
+  border-radius: 8px;
+  display: block;
+}
+
+.modal-cert-manager .cert-body .cert-download-link {
+  color: #5dade2;
+  text-decoration: none;
+  font-size: 13px;
+}
+
+.modal-cert-manager .cert-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px;
+  background-color: #222;
+}
+
 .modal-add-app .container-add-app {
   width: 100%;
   max-width: 500px;

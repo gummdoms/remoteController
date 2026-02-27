@@ -1,10 +1,18 @@
 const { app, BrowserWindow, ipcMain, Tray, Menu, dialog, shell } = require('electron');
 const express = require('express');
 const https = require('https');
+const os = require('os');
+const { X509Certificate } = require('crypto');
 const path = require('path');
 const { exec, execFile, execSync } = require('child_process');
 const asyncQueue = require('async'); // Para manejar la cola de tareas
 const fs = require('fs');
+let QRCode = null;
+try {
+    QRCode = require('qrcode');
+} catch (error) {
+    console.warn('⚠️ qrcode no está disponible. El endpoint de QR devolverá solo URL de descarga.');
+}
 let robot = null;
 try {
     robot = require('robotjs');
@@ -522,8 +530,181 @@ const server = express();
 const REQUEST_BODY_LIMIT = '10mb';
 const HTTP_PORT = Number(process.env.HTTP_PORT || 4800);
 const HTTPS_PORT = Number(process.env.HTTPS_PORT || 5443);
+const CERTS_DIR = path.join(__dirname, 'certs');
 const HTTPS_KEY_PATH = process.env.HTTPS_KEY_PATH || path.join(__dirname, 'certs', 'server.key');
 const HTTPS_CERT_PATH = process.env.HTTPS_CERT_PATH || path.join(__dirname, 'certs', 'server.crt');
+const ROOT_CA_PUBLIC_PATH = path.join(CERTS_DIR, 'rootCA.crt');
+let mkcertExecutablePath = null;
+let httpServer = null;
+let httpsServer = null;
+let certificateRuntimeState = {
+    ok: false,
+    ip: null,
+    message: 'Certificado no inicializado'
+};
+
+function getPrimaryLocalIPv4() {
+    const interfaces = os.networkInterfaces();
+    const preferred = [];
+    const fallback = [];
+
+    for (const [name, addresses] of Object.entries(interfaces)) {
+        if (!Array.isArray(addresses)) {
+            continue;
+        }
+
+        for (const entry of addresses) {
+            if (!entry || entry.family !== 'IPv4' || entry.internal) {
+                continue;
+            }
+
+            if (entry.address.startsWith('169.254.')) {
+                continue;
+            }
+
+            const target = {
+                name: name.toLowerCase(),
+                address: entry.address
+            };
+
+            if (/ethernet|wi-?fi|wlan|en\d+|eth\d+/.test(target.name)) {
+                preferred.push(target.address);
+            } else {
+                fallback.push(target.address);
+            }
+        }
+    }
+
+    return preferred[0] || fallback[0] || null;
+}
+
+function findMkcertExecutable() {
+    if (mkcertExecutablePath && fs.existsSync(mkcertExecutablePath)) {
+        return mkcertExecutablePath;
+    }
+
+    if (process.env.MKCERT_PATH && fs.existsSync(process.env.MKCERT_PATH)) {
+        mkcertExecutablePath = process.env.MKCERT_PATH;
+        return mkcertExecutablePath;
+    }
+
+    try {
+        if (isWindows) {
+            const found = execSync('where mkcert', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
+                .split(/\r?\n/)
+                .map((value) => value.trim())
+                .find(Boolean);
+            if (found && fs.existsSync(found)) {
+                mkcertExecutablePath = found;
+                return mkcertExecutablePath;
+            }
+        } else {
+            const found = execSync('command -v mkcert', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+            if (found && fs.existsSync(found)) {
+                mkcertExecutablePath = found;
+                return mkcertExecutablePath;
+            }
+        }
+    } catch (error) {
+        // Ignorar: probaremos rutas alternativas.
+    }
+
+    if (isWindows) {
+        const wingetPackagesDir = path.join(process.env.LOCALAPPDATA || '', 'Microsoft', 'WinGet', 'Packages');
+        if (fs.existsSync(wingetPackagesDir)) {
+            try {
+                const packages = fs.readdirSync(wingetPackagesDir).filter((item) => item.toLowerCase().includes('mkcert'));
+                for (const pkg of packages) {
+                    const candidate = path.join(wingetPackagesDir, pkg, 'mkcert.exe');
+                    if (fs.existsSync(candidate)) {
+                        mkcertExecutablePath = candidate;
+                        return mkcertExecutablePath;
+                    }
+                }
+            } catch (error) {
+                // Ignorar
+            }
+        }
+    }
+
+    return null;
+}
+
+function runMkcert(args) {
+    const executable = findMkcertExecutable();
+    if (!executable) {
+        throw new Error('mkcert no está instalado en el sistema.');
+    }
+    return execFileSync(executable, args, { encoding: 'utf8' });
+}
+
+function certificateSupportsIp(ipAddress) {
+    if (!ipAddress || !fs.existsSync(HTTPS_CERT_PATH)) {
+        return false;
+    }
+
+    try {
+        const cert = new X509Certificate(fs.readFileSync(HTTPS_CERT_PATH));
+        const san = cert.subjectAltName || '';
+        return san.includes(`IP Address:${ipAddress}`);
+    } catch (error) {
+        return false;
+    }
+}
+
+function syncRootCaForClients() {
+    const caroot = runMkcert(['-CAROOT']).trim();
+    const rootCaPemPath = path.join(caroot, 'rootCA.pem');
+    if (!fs.existsSync(rootCaPemPath)) {
+        throw new Error('No se encontró rootCA.pem en el directorio de mkcert.');
+    }
+    fs.copyFileSync(rootCaPemPath, ROOT_CA_PUBLIC_PATH);
+}
+
+function ensureLocalHttpsCertificate(force = false) {
+    ensureDirectory(CERTS_DIR);
+
+    const ipAddress = getPrimaryLocalIPv4();
+    if (!ipAddress) {
+        return {
+            ok: false,
+            ip: null,
+            message: 'No se detectó una IP IPv4 local válida para generar certificado.'
+        };
+    }
+
+    const requiresNewCertificate = force
+        || !fs.existsSync(HTTPS_KEY_PATH)
+        || !fs.existsSync(HTTPS_CERT_PATH)
+        || !certificateSupportsIp(ipAddress)
+        || !fs.existsSync(ROOT_CA_PUBLIC_PATH);
+
+    if (!requiresNewCertificate) {
+        return {
+            ok: true,
+            ip: ipAddress,
+            message: 'Certificado vigente para la IP actual.'
+        };
+    }
+
+    try {
+        runMkcert(['-install']);
+        runMkcert(['-key-file', HTTPS_KEY_PATH, '-cert-file', HTTPS_CERT_PATH, 'localhost', '127.0.0.1', '::1', ipAddress]);
+        syncRootCaForClients();
+
+        return {
+            ok: true,
+            ip: ipAddress,
+            message: `Certificado generado para ${ipAddress}`
+        };
+    } catch (error) {
+        return {
+            ok: false,
+            ip: ipAddress,
+            message: `No se pudo generar certificado automáticamente: ${error.message}`
+        };
+    }
+}
 
 function loadHttpsCredentials() {
     if (!fs.existsSync(HTTPS_KEY_PATH) || !fs.existsSync(HTTPS_CERT_PATH)) {
@@ -542,9 +723,20 @@ function loadHttpsCredentials() {
 }
 
 function startApiServers() {
-    server.listen(HTTP_PORT, () => {
-        console.log(`Servidor HTTP en el puerto ${HTTP_PORT}`);
-    });
+    if (!httpServer) {
+        httpServer = server.listen(HTTP_PORT, () => {
+            console.log(`Servidor HTTP en el puerto ${HTTP_PORT}`);
+        });
+    }
+
+    if (httpsServer) {
+        try {
+            httpsServer.close();
+        } catch (error) {
+            console.error('No se pudo cerrar el servidor HTTPS previo:', error.message);
+        }
+        httpsServer = null;
+    }
 
     const credentials = loadHttpsCredentials();
     if (!credentials) {
@@ -552,7 +744,7 @@ function startApiServers() {
         return;
     }
 
-    https.createServer(credentials, server).listen(HTTPS_PORT, () => {
+    httpsServer = https.createServer(credentials, server).listen(HTTPS_PORT, () => {
         console.log(`Servidor HTTPS en el puerto ${HTTPS_PORT}`);
     });
 }
@@ -569,6 +761,10 @@ server.use((err, req, res, next) => {
     }
     next(err);
 });
+certificateRuntimeState = ensureLocalHttpsCertificate(false);
+if (!certificateRuntimeState.ok) {
+    console.warn(certificateRuntimeState.message);
+}
 startApiServers();
 //pagina de inicio *//los htmls se encuentran en la carpeta views
 server.use(express.static(path.join(__dirname, 'views')));
@@ -579,6 +775,58 @@ server.use('/dashboard/img/icons', express.static(path.join(__dirname, '../dashb
 server.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'views', 'index.html'));
 });
+
+server.get('/cert/rootca', (req, res) => {
+    if (!fs.existsSync(ROOT_CA_PUBLIC_PATH)) {
+        return res.status(404).send({ error: 'No existe rootCA.crt. Regenera el certificado.' });
+    }
+    return res.download(ROOT_CA_PUBLIC_PATH, 'rootCA.crt');
+});
+
+server.get('/cert/info', async (req, res) => {
+    const ipAddress = certificateRuntimeState.ip || getPrimaryLocalIPv4();
+    const host = ipAddress || 'localhost';
+    const rootCaDownloadUrl = `http://${host}:${HTTP_PORT}/cert/rootca`;
+    const httpsUrl = `https://${host}:${HTTPS_PORT}`;
+    let qrDataUrl = null;
+
+    if (QRCode) {
+        try {
+            qrDataUrl = await QRCode.toDataURL(rootCaDownloadUrl, {
+                width: 280,
+                margin: 1
+            });
+        } catch (error) {
+            qrDataUrl = null;
+        }
+    }
+
+    return res.send({
+        ok: certificateRuntimeState.ok,
+        message: certificateRuntimeState.message,
+        ip: host,
+        httpPort: HTTP_PORT,
+        httpsPort: HTTPS_PORT,
+        httpsUrl,
+        rootCaDownloadUrl,
+        qrDataUrl,
+        certExists: fs.existsSync(HTTPS_CERT_PATH) && fs.existsSync(HTTPS_KEY_PATH),
+        rootCaExists: fs.existsSync(ROOT_CA_PUBLIC_PATH)
+    });
+});
+
+server.post('/cert/regenerate', (req, res) => {
+    const result = ensureLocalHttpsCertificate(true);
+    certificateRuntimeState = result;
+
+    if (!result.ok) {
+        return res.status(500).send(result);
+    }
+
+    startApiServers();
+    return res.send(result);
+});
+
 server.get('/brillo', async (req, res) => {
     if (!ensureDisplayControlAvailable(res)) {
         return;

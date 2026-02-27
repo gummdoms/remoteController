@@ -12,6 +12,7 @@ const CORE_ASSETS = [
     '/static/js/controller_app.js',
     '/static/js/transfer.js',
     '/static/js/voice-dictation.js',
+    '/static/js/cert-manager.js',
     '/static/js/powerOff.js',
     '/static/js/mouse.config.js',
     '/static/img/pwa-192.png',
