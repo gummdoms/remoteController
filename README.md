@@ -58,8 +58,28 @@ npm start
 
 - Asegúrate de estar en la misma red WiFi que tu PC
 - Abre el navegador del móvil
-- Ve a: `http://[IP-DE-TU-PC]:4800`
+- Ve a: `http://[IP-DE-TU-PC]:4800` (modo HTTP)
 - Ejemplo: `http://192.168.1.100:4800`
+- Para micrófono/voz usa HTTPS local: `https://[IP-DE-TU-PC]:5443`
+- Si tienes certificados en `certs/server.key` y `certs/server.crt`, la app levanta HTTP+HTTPS automáticamente.
+
+### HTTPS local (recomendado para dictado por voz)
+
+1. Genera certificados locales (ejemplo con `mkcert`):
+
+```powershell
+mkcert -install
+mkcert -key-file certs/server.key -cert-file certs/server.crt localhost 127.0.0.1 ::1 192.168.1.100
+```
+
+1. Reemplaza `192.168.1.100` por la IP local real del PC.
+1. Reinicia la app con `npm start`.
+1. En el móvil abre `https://TU_IP:5443`.
+
+Notas:
+
+- Si no existen los certificados, solo se habilita HTTP.
+- Puedes cambiar rutas/puertos con `HTTPS_KEY_PATH`, `HTTPS_CERT_PATH`, `HTTP_PORT`, `HTTPS_PORT`.
 
 ### 2. Touchpad Virtual
 

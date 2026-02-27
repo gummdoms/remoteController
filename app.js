@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain, Tray, Menu, dialog, shell } = require('electron');
 const express = require('express');
+const https = require('https');
 const path = require('path');
 const { exec, execFile, execSync } = require('child_process');
 const asyncQueue = require('async'); // Para manejar la cola de tareas
@@ -519,6 +520,43 @@ ipcMain.on('toggleMaximize', () => {
 });
 const server = express();
 const REQUEST_BODY_LIMIT = '10mb';
+const HTTP_PORT = Number(process.env.HTTP_PORT || 4800);
+const HTTPS_PORT = Number(process.env.HTTPS_PORT || 5443);
+const HTTPS_KEY_PATH = process.env.HTTPS_KEY_PATH || path.join(__dirname, 'certs', 'server.key');
+const HTTPS_CERT_PATH = process.env.HTTPS_CERT_PATH || path.join(__dirname, 'certs', 'server.crt');
+
+function loadHttpsCredentials() {
+    if (!fs.existsSync(HTTPS_KEY_PATH) || !fs.existsSync(HTTPS_CERT_PATH)) {
+        return null;
+    }
+
+    try {
+        return {
+            key: fs.readFileSync(HTTPS_KEY_PATH),
+            cert: fs.readFileSync(HTTPS_CERT_PATH)
+        };
+    } catch (error) {
+        console.error('No se pudieron cargar los certificados HTTPS:', error.message);
+        return null;
+    }
+}
+
+function startApiServers() {
+    server.listen(HTTP_PORT, () => {
+        console.log(`Servidor HTTP en el puerto ${HTTP_PORT}`);
+    });
+
+    const credentials = loadHttpsCredentials();
+    if (!credentials) {
+        console.warn('HTTPS deshabilitado: faltan certificados en certs/server.key y certs/server.crt');
+        return;
+    }
+
+    https.createServer(credentials, server).listen(HTTPS_PORT, () => {
+        console.log(`Servidor HTTPS en el puerto ${HTTPS_PORT}`);
+    });
+}
+
 server.use(cors()); // Usa cors para habilitar CORS en todas las rutas
 server.use(express.urlencoded({ extended: true, limit: REQUEST_BODY_LIMIT }));
 server.use(express.json({ limit: REQUEST_BODY_LIMIT }));
@@ -531,9 +569,7 @@ server.use((err, req, res, next) => {
     }
     next(err);
 });
-server.listen(4800, () => {
-    console.log('Servidor en el puerto 4800');
-});
+startApiServers();
 //pagina de inicio *//los htmls se encuentran en la carpeta views
 server.use(express.static(path.join(__dirname, 'views')));
 server.use('/node_modules', express.static(path.join(__dirname, 'node_modules')));
