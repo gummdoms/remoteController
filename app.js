@@ -34,6 +34,10 @@ const currentDesktop = (process.env.XDG_CURRENT_DESKTOP || process.env.DESKTOP_S
 const isKDE = isLinux && /kde|plasma/.test(currentDesktop);
 const currentSessionType = (process.env.XDG_SESSION_TYPE || '').toLowerCase();
 const isWaylandSession = isLinux && currentSessionType === 'wayland';
+const waylandEnvValue = String(process.env.ALLOW_WAYLAND_INPUT || '').toLowerCase();
+let allowWaylandInputExperimental = waylandEnvValue
+    ? ['1', 'true', 'yes', 'on'].includes(waylandEnvValue)
+    : true;
 
 const ALERT_THRESHOLD_MS = 5 * 60 * 1000;
 const hasRobotFallback = () => Boolean(robot);
@@ -82,14 +86,14 @@ const parseBoolean = (value) => {
     }
     return Boolean(value);
 };
-const waylandInputMessage = 'En sesiones Wayland, el control remoto de entrada requiere permisos del compositor y puede mostrar avisos repetidos. Para evitarlo, inicia sesión en X11.';
+const waylandInputMessage = 'Sesión Wayland detectada. El control remoto de entrada requiere permisos del compositor y puede mostrar avisos repetidos.';
 const ensureInputInjectionAvailable = (res) => {
-    if (!isWaylandSession) {
+    if (!isWaylandSession || allowWaylandInputExperimental) {
         return true;
     }
     if (res) {
         res.status(409).send({
-            error: waylandInputMessage,
+            error: `${waylandInputMessage} Activa "Modo Wayland experimental" para permitir el intento de control remoto.`,
             code: 'WAYLAND_INPUT_RESTRICTED'
         });
     }
@@ -468,6 +472,14 @@ const dbPath = resolvedPath();
 ensureDirectory(path.dirname(dbPath));
 const db = new connApps(dbPath);
 const settingsStore = new SettingsStore(dbPath);
+
+settingsStore.getWaylandInputExperimental(allowWaylandInputExperimental)
+    .then((enabled) => {
+        allowWaylandInputExperimental = Boolean(enabled);
+    })
+    .catch((error) => {
+        console.warn('No se pudo leer preferencia wayland_input_experimental:', error.message);
+    });
 
 const MOUSE_POINTER_MIN = 0.5;
 const MOUSE_POINTER_MAX = 6;
@@ -978,7 +990,12 @@ ipcMain.handle('service:getStatus', () => {
         autostart: getAutostartState(),
         platform: process.platform,
         sessionType: process.env.XDG_SESSION_TYPE || null,
-        inputDiagnosis: getInputPermissionDiagnosis()
+        inputDiagnosis: getInputPermissionDiagnosis(),
+        inputControl: {
+            waylandExperimentalAvailable: isLinux && isWaylandSession,
+            waylandExperimentalEnabled: Boolean(allowWaylandInputExperimental),
+            canInjectInput: !isWaylandSession || Boolean(allowWaylandInputExperimental)
+        }
     };
 });
 
@@ -1000,6 +1017,29 @@ ipcMain.handle('service:diagnoseInputPermission', () => {
 
 ipcMain.handle('service:applyInputPermissionFix', async () => {
     return applyLinuxInputPermissionFix();
+});
+
+ipcMain.handle('service:setWaylandInputExperimental', async (event, payload) => {
+    if (!isLinux) {
+        return {
+            ok: false,
+            enabled: false,
+            message: 'Esta opción solo aplica en Linux.'
+        };
+    }
+
+    const enabled = Boolean(payload?.enabled);
+    allowWaylandInputExperimental = enabled;
+
+    await settingsStore.setWaylandInputExperimental(enabled);
+
+    return {
+        ok: true,
+        enabled,
+        message: enabled
+            ? 'Modo Wayland experimental activado. Se permitirá solicitar permisos al compositor para controlar entrada.'
+            : 'Modo Wayland experimental desactivado. Se bloqueará el control remoto de entrada en Wayland.'
+    };
 });
 
 function findMkcertExecutable() {

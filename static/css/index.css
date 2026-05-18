@@ -411,11 +411,11 @@ button {
   transition: transform 0.2s ease;
 }
 
-#autostart-toggle:checked+.switch-ui {
+.switch-row input:checked+.switch-ui {
   background: linear-gradient(135deg, var(--blue), #2275ff);
 }
 
-#autostart-toggle:checked+.switch-ui::before {
+.switch-row input:checked+.switch-ui::before {
   transform: translateX(20px);
 }
 

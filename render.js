@@ -10,6 +10,9 @@ $(document).ready(function () {
     const $diagList = $('#input-diag-list');
     const $diagMessage = $('#input-diag-message');
     const $applyFix = $('#apply-input-fix');
+    const $waylandRow = $('#wayland-experimental-row');
+    const $waylandToggle = $('#wayland-experimental-toggle');
+    const $waylandStatus = $('#wayland-experimental-status');
 
     let latestCommands = [];
     let tooltipTarget = null;
@@ -126,11 +129,27 @@ $(document).ready(function () {
             $diagMessage.text(diag.message || 'Sin diagnóstico disponible.');
             $diagMessage.data('sessionType', state?.sessionType || '');
             const isWayland = String(state.sessionType || '').toLowerCase() === 'wayland';
-            $applyFix.prop('disabled', state?.platform !== 'linux' || isWayland);
+            $applyFix.prop('disabled', state?.platform !== 'linux');
             if (isWayland) {
-                $applyFix.attr('title', 'En Wayland este ajuste no evita los avisos del compositor. Usa sesión X11.');
+                $applyFix.attr('title', 'En Wayland esta acción muestra información y no elimina avisos del compositor.');
             } else {
                 $applyFix.removeAttr('title');
+            }
+
+            const inputControl = state?.inputControl || {};
+            const showWaylandControls = Boolean(inputControl.waylandExperimentalAvailable);
+            $waylandRow.toggle(showWaylandControls);
+            $waylandStatus.toggle(showWaylandControls);
+
+            if (showWaylandControls) {
+                const enabled = Boolean(inputControl.waylandExperimentalEnabled);
+                $waylandToggle.prop('checked', enabled);
+                $waylandToggle.prop('disabled', false);
+                $waylandStatus.text(
+                    enabled
+                        ? 'Modo Wayland experimental activado: se intentará controlar entrada (puede pedir confirmación).' 
+                        : 'Modo Wayland experimental desactivado: control de cursor y teclado remoto bloqueado en Wayland.'
+                );
             }
         } catch (error) {
             console.error('No se pudo cargar estado del servicio:', error);
@@ -222,6 +241,31 @@ $(document).ready(function () {
         renderChecks(response.checks || []);
         latestCommands = response.recommendedCommands || [];
         $diagMessage.text(response.message || 'Sin diagnóstico disponible.');
+        $diagMessage.data('sessionType', response?.sessionType || '');
+    });
+
+    $waylandToggle.on('change', async function () {
+        const enabled = $(this).is(':checked');
+        $waylandToggle.prop('disabled', true);
+        try {
+            const result = await api.invoke('service:setWaylandInputExperimental', { enabled });
+            $waylandToggle.prop('checked', Boolean(result.enabled));
+            $waylandStatus.text(result.message || 'Estado actualizado.');
+            await Swal.fire({
+                icon: result.enabled ? 'success' : 'info',
+                title: result.enabled ? 'Modo Wayland activado' : 'Modo Wayland desactivado',
+                text: result.message || 'Configuración actualizada.'
+            });
+        } catch (error) {
+            $waylandToggle.prop('checked', !enabled);
+            await Swal.fire({
+                icon: 'error',
+                title: 'No se pudo actualizar',
+                text: error.message || 'Error al actualizar el modo Wayland experimental.'
+            });
+        } finally {
+            $waylandToggle.prop('disabled', false);
+        }
     });
 
     $('#show-input-commands').on('click', async () => {
@@ -241,7 +285,7 @@ $(document).ready(function () {
                 await Swal.fire({
                     icon: 'info',
                     title: 'Sesión Wayland detectada',
-                    text: 'Para evitar solicitudes repetidas de control de entrada, inicia sesión en X11.'
+                    text: 'Los comandos de grupos y /dev/uinput ya están correctos, pero Wayland puede seguir pidiendo privilegios por política del compositor. Para evitarlo, usa sesión X11.'
                 });
                 return;
             }

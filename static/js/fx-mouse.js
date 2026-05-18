@@ -49,7 +49,7 @@ class TouchpadController {
         this.leftButtonHeld = false;
         this.doubleTapPending = false;
         this.singleTapMaxDuration = 220;
-        this.inputBlocked = false;
+        this.inputBlockedUntil = 0;
         this.inputBlockedNotified = false;
 
         // Referencias UI para mensajes
@@ -362,6 +362,8 @@ class TouchpadController {
     // ===== ENVIAR COMANDOS AL SERVIDOR =====
     async handleInputResponse(response) {
         if (response.ok) {
+            this.inputBlockedUntil = 0;
+            this.inputBlockedNotified = false;
             return true;
         }
 
@@ -373,7 +375,7 @@ class TouchpadController {
         }
 
         if (response.status === 409 && payload?.code === 'WAYLAND_INPUT_RESTRICTED') {
-            this.inputBlocked = true;
+            this.inputBlockedUntil = Date.now() + 2500;
             if (!this.inputBlockedNotified && typeof Swal !== 'undefined') {
                 this.inputBlockedNotified = true;
                 Swal.fire({
@@ -389,7 +391,7 @@ class TouchpadController {
     }
 
     sendMovement(deltaX, deltaY) {
-        if (this.inputBlocked) return;
+        if (Date.now() < this.inputBlockedUntil) return;
         // Throttle para no saturar el servidor
         const now = Date.now();
         if (now - this.lastSendTime < this.throttleDelay) return;
@@ -417,7 +419,7 @@ class TouchpadController {
     }
 
     sendScroll(deltaY) {
-        if (this.inputBlocked) return;
+        if (Date.now() < this.inputBlockedUntil) return;
         const now = Date.now();
         if (now - this.lastSendTime < this.throttleDelay * 2) return; // Más lento para scroll
         this.lastSendTime = now;
@@ -437,7 +439,7 @@ class TouchpadController {
     }
 
     sendClick(button = 'left') {
-        if (this.inputBlocked) return;
+        if (Date.now() < this.inputBlockedUntil) return;
         fetch(`${URL_API}mouse/click`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -448,7 +450,7 @@ class TouchpadController {
     }
 
     sendDoubleClick() {
-        if (this.inputBlocked) return;
+        if (Date.now() < this.inputBlockedUntil) return;
         fetch(`${URL_API}mouse/doubleclick`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
@@ -458,7 +460,7 @@ class TouchpadController {
     }
 
     sendMouseDown(button = 'left') {
-        if (this.inputBlocked) return;
+        if (Date.now() < this.inputBlockedUntil) return;
         if (button === 'left' && this.leftButtonHeld) return;
 
         if (button === 'left') {
@@ -480,7 +482,7 @@ class TouchpadController {
     }
 
     sendMouseUp(button = 'left') {
-        if (this.inputBlocked) return;
+        if (Date.now() < this.inputBlockedUntil) return;
         if (button === 'left' && !this.leftButtonHeld) return;
 
         const wasHeld = this.leftButtonHeld;

@@ -108,6 +108,16 @@
                             Actualizar</button>
                     </div>
                     <p class="hint" id="input-diag-message">Analizando configuración...</p>
+                    <label class="switch-row" id="wayland-experimental-row" style="display:none; margin-top: 6px;">
+                        <div>
+                            <strong>Modo Wayland experimental</strong>
+                            <p>Permite mover cursor y teclear en Wayland, pero el compositor puede pedir confirmación
+                                repetida.</p>
+                        </div>
+                        <input type="checkbox" id="wayland-experimental-toggle">
+                        <span class="switch-ui"></span>
+                    </label>
+                    <p class="hint" id="wayland-experimental-status" style="display:none;">Cargando modo Wayland...</p>
                     <ul class="diag-list" id="input-diag-list"></ul>
                     <div class="panel-actions" id="input-actions">
                         <button class="btn-primary" id="apply-input-fix"><i class="bi bi-wrench"></i> Aplicar
