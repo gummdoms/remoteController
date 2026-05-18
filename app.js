@@ -32,6 +32,12 @@ const isWindows = process.platform === 'win32';
 const isLinux = process.platform === 'linux';
 const currentDesktop = (process.env.XDG_CURRENT_DESKTOP || process.env.DESKTOP_SESSION || '').toLowerCase();
 const isKDE = isLinux && /kde|plasma/.test(currentDesktop);
+const currentSessionType = (process.env.XDG_SESSION_TYPE || '').toLowerCase();
+const isWaylandSession = isLinux && currentSessionType === 'wayland';
+const waylandEnvValue = String(process.env.ALLOW_WAYLAND_INPUT || '').toLowerCase();
+let allowWaylandInputExperimental = waylandEnvValue
+    ? ['1', 'true', 'yes', 'on'].includes(waylandEnvValue)
+    : true;
 
 const ALERT_THRESHOLD_MS = 5 * 60 * 1000;
 const hasRobotFallback = () => Boolean(robot);
@@ -79,6 +85,19 @@ const parseBoolean = (value) => {
         return ['true', '1', 'on', 'yes'].includes(value.toLowerCase());
     }
     return Boolean(value);
+};
+const waylandInputMessage = 'Sesión Wayland detectada. El control remoto de entrada requiere permisos del compositor y puede mostrar avisos repetidos.';
+const ensureInputInjectionAvailable = (res) => {
+    if (!isWaylandSession || allowWaylandInputExperimental) {
+        return true;
+    }
+    if (res) {
+        res.status(409).send({
+            error: `${waylandInputMessage} Activa "Modo Wayland experimental" para permitir el intento de control remoto.`,
+            code: 'WAYLAND_INPUT_RESTRICTED'
+        });
+    }
+    return false;
 };
 const commandExists = (binary) => {
     if (!binary) {
@@ -454,6 +473,14 @@ ensureDirectory(path.dirname(dbPath));
 const db = new connApps(dbPath);
 const settingsStore = new SettingsStore(dbPath);
 
+settingsStore.getWaylandInputExperimental(allowWaylandInputExperimental)
+    .then((enabled) => {
+        allowWaylandInputExperimental = Boolean(enabled);
+    })
+    .catch((error) => {
+        console.warn('No se pudo leer preferencia wayland_input_experimental:', error.message);
+    });
+
 const MOUSE_POINTER_MIN = 0.5;
 const MOUSE_POINTER_MAX = 6;
 const MOUSE_SCROLL_MIN = 0.5;
@@ -514,6 +541,22 @@ const createWindow = () => {
     });
 
     mainWindow.loadFile(path.join(__dirname, 'index.html'));
+
+    const emitWindowState = () => {
+        if (!mainWindow || !mainWindow.webContents) {
+            return;
+        }
+        mainWindow.webContents.send('windowStateChanged', {
+            isMaximized: mainWindow.isMaximized()
+        });
+    };
+
+    mainWindow.webContents.on('did-finish-load', () => {
+        emitWindowState();
+    });
+
+    mainWindow.on('maximize', emitWindowState);
+    mainWindow.on('unmaximize', emitWindowState);
 
     mainWindow.on('minimize', (event) => {
         event.preventDefault();
@@ -589,6 +632,12 @@ ipcMain.on('toggleMaximize', () => {
         mainWindow.maximize();
     }
 });
+
+ipcMain.handle('window:getState', () => {
+    return {
+        isMaximized: Boolean(mainWindow && mainWindow.isMaximized())
+    };
+});
 const server = express();
 const REQUEST_BODY_LIMIT = '10mb';
 const HTTP_PORT = Number(process.env.HTTP_PORT || 4800);
@@ -641,6 +690,357 @@ function getPrimaryLocalIPv4() {
 
     return preferred[0] || fallback[0] || null;
 }
+
+function getServiceHost() {
+    return certificateRuntimeState.ip || getPrimaryLocalIPv4() || 'localhost';
+}
+
+function getServiceUrls() {
+    const host = getServiceHost();
+    return {
+        host,
+        http: `http://${host}:${HTTP_PORT}/`,
+        https: `https://${host}:${HTTPS_PORT}/`
+    };
+}
+
+function getAutostartState() {
+    if (isLinux) {
+        try {
+            const autostartPath = path.join(app.getPath('home'), '.config', 'autostart', 'remotecontrollers.desktop');
+            const enabled = fs.existsSync(autostartPath);
+            return {
+                supported: true,
+                enabled,
+                message: enabled
+                    ? 'Autoinicio activado en Linux.'
+                    : 'Autoinicio desactivado en Linux.'
+            };
+        } catch (error) {
+            return {
+                supported: false,
+                enabled: false,
+                message: `No se pudo leer el estado de autoinicio en Linux: ${error.message}`
+            };
+        }
+    }
+
+    try {
+        const settings = app.getLoginItemSettings();
+        return {
+            supported: true,
+            enabled: Boolean(settings.openAtLogin),
+            message: settings.openAtLogin ? 'Autoinicio activado.' : 'Autoinicio desactivado.'
+        };
+    } catch (error) {
+        return {
+            supported: false,
+            enabled: false,
+            message: error.message
+        };
+    }
+}
+
+function setAutostartState(enabled) {
+    const shouldEnable = Boolean(enabled);
+
+    if (isLinux) {
+        const autostartDir = path.join(app.getPath('home'), '.config', 'autostart');
+        const autostartPath = path.join(autostartDir, 'remotecontrollers.desktop');
+
+        try {
+            ensureDirectory(autostartDir);
+
+            if (!shouldEnable) {
+                if (fs.existsSync(autostartPath)) {
+                    fs.unlinkSync(autostartPath);
+                }
+                return {
+                    supported: true,
+                    enabled: false,
+                    message: 'Autoinicio desactivado en Linux.'
+                };
+            }
+
+            const execPath = process.env.APPIMAGE || app.getPath('exe');
+            const escapedExec = String(execPath).replace(/"/g, '\\"');
+            const desktopFile = [
+                '[Desktop Entry]',
+                'Type=Application',
+                'Version=1.0',
+                'Name=Remote Controllers',
+                'Comment=Servicio remoto',
+                `Exec="${escapedExec}"`,
+                'Terminal=false',
+                'X-GNOME-Autostart-enabled=true'
+            ].join('\n');
+
+            fs.writeFileSync(autostartPath, `${desktopFile}\n`, { mode: 0o644 });
+
+            return {
+                supported: true,
+                enabled: true,
+                message: 'Autoinicio activado en Linux.'
+            };
+        } catch (error) {
+            throw new Error(`No se pudo configurar el autoinicio en Linux: ${error.message}`);
+        }
+    }
+
+    const options = { openAtLogin: shouldEnable };
+
+    if (isLinux && process.env.APPIMAGE) {
+        options.path = process.env.APPIMAGE;
+    }
+
+    try {
+        app.setLoginItemSettings(options);
+        return getAutostartState();
+    } catch (error) {
+        throw new Error(`No se pudo configurar el autoinicio: ${error.message}`);
+    }
+}
+
+function getInputPermissionDiagnosis() {
+    if (!isLinux) {
+        return {
+            platform: process.platform,
+            sessionType: null,
+            needsAttention: false,
+            message: 'Diagnóstico de permisos de entrada disponible solo en Linux.',
+            checks: []
+        };
+    }
+
+    const sessionType = (process.env.XDG_SESSION_TYPE || 'unknown').toLowerCase();
+    const groupCheck = (() => {
+        try {
+            const groups = execSync('id -nG', { encoding: 'utf8' }).trim().split(/\s+/).filter(Boolean);
+            return {
+                ok: groups.includes('input') && groups.includes('uinput'),
+                groups
+            };
+        } catch (error) {
+            return {
+                ok: false,
+                groups: [],
+                error: error.message
+            };
+        }
+    })();
+
+    const uinputCheck = (() => {
+        try {
+            const exists = fs.existsSync('/dev/uinput');
+            const writable = exists ? fs.accessSync('/dev/uinput', fs.constants.R_OK | fs.constants.W_OK) === undefined : false;
+            return { ok: exists && writable, exists, writable };
+        } catch (error) {
+            return { ok: false, exists: fs.existsSync('/dev/uinput'), writable: false, error: error.message };
+        }
+    })();
+
+    const needsAttention = sessionType === 'wayland' || !groupCheck.ok || !uinputCheck.ok;
+    const checks = [
+        {
+            name: 'Sesión Linux',
+            ok: sessionType !== 'unknown' && sessionType !== 'wayland',
+            details: sessionType === 'wayland'
+                ? 'XDG_SESSION_TYPE=wayland (puede pedir privilegios de entrada de forma repetida)'
+                : `XDG_SESSION_TYPE=${sessionType}`
+        },
+        {
+            name: 'Grupos input/uinput',
+            ok: groupCheck.ok,
+            details: groupCheck.groups.join(' ') || groupCheck.error || 'No disponible'
+        },
+        {
+            name: 'Acceso a /dev/uinput',
+            ok: uinputCheck.ok,
+            details: `exists=${uinputCheck.exists} writable=${uinputCheck.writable}`
+        }
+    ];
+
+    const recommendedCommands = [
+        'sudo groupadd -f uinput',
+        'sudo usermod -aG input,uinput,video $USER',
+        'echo uinput | sudo tee /etc/modules-load.d/uinput.conf',
+        "echo 'KERNEL==\"uinput\", MODE=\"0660\", GROUP=\"uinput\", OPTIONS+=\"static_node=uinput\"' | sudo tee /etc/udev/rules.d/99-uinput.rules",
+        'sudo modprobe uinput',
+        'sudo udevadm control --reload-rules && sudo udevadm trigger',
+        'Reinicia sesión para aplicar grupos'
+    ];
+
+    if (sessionType === 'wayland') {
+        recommendedCommands.unshift(
+            'Para evitar avisos repetidos de privilegios de entrada, inicia sesión en X11 (Plasma/X11 o GNOME on Xorg).'
+        );
+    }
+
+    return {
+        platform: process.platform,
+        sessionType,
+        needsAttention,
+        message: sessionType === 'wayland'
+            ? 'Sesión Wayland detectada: el sistema puede solicitar permisos de control de entrada de forma recurrente.'
+            : needsAttention
+                ? 'Se detectaron condiciones que pueden provocar el aviso de privilegios de entrada en Linux.'
+            : 'Configuración de permisos de entrada en buen estado.',
+        checks,
+        recommendedCommands
+    };
+}
+
+function shellSingleQuote(value) {
+    return `'${String(value).replace(/'/g, `'"'"'`)}'`;
+}
+
+function resolveLinuxTargetUser() {
+    const candidates = [
+        process.env.SUDO_USER,
+        process.env.USER,
+        process.env.LOGNAME,
+        (() => {
+            try {
+                return execSync('id -un', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+            } catch (error) {
+                return '';
+            }
+        })(),
+        (() => {
+            try {
+                return os.userInfo().username;
+            } catch (error) {
+                return '';
+            }
+        })()
+    ];
+
+    for (const candidate of candidates) {
+        const value = String(candidate || '').trim();
+        if (value && value !== 'root') {
+            return value;
+        }
+    }
+
+    return '';
+}
+
+function buildLinuxInputFixScript(targetUser) {
+    const safeUser = shellSingleQuote(targetUser);
+    return [
+        'set -e',
+        `TARGET_USER=${safeUser}`,
+        'if [ -z "$TARGET_USER" ]; then',
+        '  echo "No se detectó un usuario objetivo para aplicar permisos."',
+        '  exit 1',
+        'fi',
+        'if ! id "$TARGET_USER" >/dev/null 2>&1; then',
+        '  echo "El usuario objetivo no existe: $TARGET_USER"',
+        '  exit 1',
+        'fi',
+        'groupadd -f input',
+        'groupadd -f uinput',
+        'usermod -aG input,uinput,video "$TARGET_USER"',
+        'echo uinput > /etc/modules-load.d/uinput.conf',
+        "echo 'KERNEL==\"uinput\", MODE=\"0660\", GROUP=\"uinput\", OPTIONS+=\"static_node=uinput\"' > /etc/udev/rules.d/99-uinput.rules",
+        'modprobe uinput',
+        'udevadm control --reload-rules',
+        'udevadm trigger'
+    ].join('\n');
+}
+
+async function applyLinuxInputPermissionFix() {
+    if (!isLinux) {
+        throw new Error('Esta acción solo está disponible en Linux.');
+    }
+    if (!commandExists('pkexec')) {
+        throw new Error('pkexec no está disponible. Instala polkit para aplicar la configuración automática.');
+    }
+    if (isWaylandSession) {
+        throw new Error('Sesión Wayland detectada. Este ajuste no evita los avisos del compositor; usa una sesión X11 para evitar solicitudes repetidas.');
+    }
+
+    const targetUser = resolveLinuxTargetUser();
+    if (!targetUser) {
+        throw new Error('No se pudo detectar el usuario de la sesión para aplicar permisos. Cierra sesión root y ejecuta la app con tu usuario normal.');
+    }
+
+    const tempScriptPath = path.join(app.getPath('temp'), `remotecontrollers-input-fix-${Date.now()}.sh`);
+    fs.writeFileSync(tempScriptPath, buildLinuxInputFixScript(targetUser), { mode: 0o700 });
+
+    try {
+        await execCommandPromise(`pkexec /bin/bash "${tempScriptPath}"`, 'aplicar permisos de entrada linux');
+        return {
+            ok: true,
+            message: `Configuración aplicada para ${targetUser}. Reinicia sesión para que los grupos se reflejen en tu usuario.`,
+            diagnosis: getInputPermissionDiagnosis()
+        };
+    } finally {
+        try {
+            fs.unlinkSync(tempScriptPath);
+        } catch (error) {
+            // Ignorar limpieza.
+        }
+    }
+}
+
+ipcMain.handle('service:getStatus', () => {
+    return {
+        urls: getServiceUrls(),
+        autostart: getAutostartState(),
+        platform: process.platform,
+        sessionType: process.env.XDG_SESSION_TYPE || null,
+        inputDiagnosis: getInputPermissionDiagnosis(),
+        inputControl: {
+            waylandExperimentalAvailable: isLinux && isWaylandSession,
+            waylandExperimentalEnabled: Boolean(allowWaylandInputExperimental),
+            canInjectInput: !isWaylandSession || Boolean(allowWaylandInputExperimental)
+        }
+    };
+});
+
+ipcMain.handle('service:setAutostart', (event, payload) => {
+    return setAutostartState(Boolean(payload?.enabled));
+});
+
+ipcMain.handle('service:openUrl', async (event, payload) => {
+    const mode = payload?.mode === 'https' ? 'https' : 'http';
+    const urls = getServiceUrls();
+    const targetUrl = mode === 'https' ? urls.https : urls.http;
+    await shell.openExternal(targetUrl);
+    return { ok: true, url: targetUrl };
+});
+
+ipcMain.handle('service:diagnoseInputPermission', () => {
+    return getInputPermissionDiagnosis();
+});
+
+ipcMain.handle('service:applyInputPermissionFix', async () => {
+    return applyLinuxInputPermissionFix();
+});
+
+ipcMain.handle('service:setWaylandInputExperimental', async (event, payload) => {
+    if (!isLinux) {
+        return {
+            ok: false,
+            enabled: false,
+            message: 'Esta opción solo aplica en Linux.'
+        };
+    }
+
+    const enabled = Boolean(payload?.enabled);
+    allowWaylandInputExperimental = enabled;
+
+    await settingsStore.setWaylandInputExperimental(enabled);
+
+    return {
+        ok: true,
+        enabled,
+        message: enabled
+            ? 'Modo Wayland experimental activado. Se permitirá solicitar permisos al compositor para controlar entrada.'
+            : 'Modo Wayland experimental desactivado. Se bloqueará el control remoto de entrada en Wayland.'
+    };
+});
 
 function findMkcertExecutable() {
     if (mkcertExecutablePath && fs.existsSync(mkcertExecutablePath)) {
@@ -1426,6 +1826,9 @@ function handleInputPayload(body) {
 }
 
 server.post('/teclear', (req, res) => {
+    if (!ensureInputInjectionAvailable(res)) {
+        return;
+    }
     try {
         handleInputPayload(req.body || {});
         res.send({ status: 'ok' });
@@ -1797,6 +2200,9 @@ server.post('/transferirArchivo', upload.single('archivo'), (req, res) => {
 
 // Mover mouse de manera RELATIVA (como touchpad)
 server.post('/mouse/move', (req, res) => {
+    if (!ensureInputInjectionAvailable(res)) {
+        return;
+    }
     const { dx, dy } = req.body;
 
     if (typeof dx !== 'number' || typeof dy !== 'number') {
@@ -1823,6 +2229,9 @@ server.post('/mouse/move', (req, res) => {
 
 // Click
 server.post('/mouse/click', (req, res) => {
+    if (!ensureInputInjectionAvailable(res)) {
+        return;
+    }
     const { button = 'left' } = req.body;
 
     try {
@@ -1842,6 +2251,9 @@ server.post('/mouse/click', (req, res) => {
 
 // Doble click
 server.post('/mouse/doubleclick', (req, res) => {
+    if (!ensureInputInjectionAvailable(res)) {
+        return;
+    }
     try {
         if (nativeInput) {
             nativeInput.doubleClick();
@@ -1859,6 +2271,9 @@ server.post('/mouse/doubleclick', (req, res) => {
 
 // Scroll
 server.post('/mouse/scroll', (req, res) => {
+    if (!ensureInputInjectionAvailable(res)) {
+        return;
+    }
     const { delta } = req.body;
 
     if (typeof delta !== 'number') {
@@ -1932,6 +2347,9 @@ server.get('/mouse/position', (req, res) => {
 
 // Mouse down (mantener presionado)
 server.post('/mouse/down', (req, res) => {
+    if (!ensureInputInjectionAvailable(res)) {
+        return;
+    }
     const { button = 'left' } = req.body;
 
     try {
@@ -1951,6 +2369,9 @@ server.post('/mouse/down', (req, res) => {
 
 // Mouse up (soltar botón)
 server.post('/mouse/up', (req, res) => {
+    if (!ensureInputInjectionAvailable(res)) {
+        return;
+    }
     const { button = 'left' } = req.body;
 
     try {

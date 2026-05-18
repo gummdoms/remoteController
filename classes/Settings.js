@@ -20,6 +20,14 @@ class SettingsStore {
                     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
                 )
             `);
+
+            this.db.run(`
+                CREATE TABLE IF NOT EXISTS app_preferences (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
         });
     }
 
@@ -86,6 +94,56 @@ class SettingsStore {
             scrollSpeed: Number(row.scroll_speed),
             updatedAt: row.updated_at || null
         };
+    }
+
+    getPreference(key, fallbackValue = null) {
+        return new Promise((resolve, reject) => {
+            this.db.get('SELECT value FROM app_preferences WHERE key = ?', [key], (err, row) => {
+                if (err) {
+                    reject(err);
+                    return;
+                }
+                if (!row) {
+                    resolve(fallbackValue);
+                    return;
+                }
+                resolve(row.value);
+            });
+        });
+    }
+
+    setPreference(key, value) {
+        const serializedValue = String(value);
+        const updatedAt = new Date().toISOString();
+
+        return new Promise((resolve, reject) => {
+            this.db.run(
+                `INSERT INTO app_preferences (key, value, updated_at)
+                 VALUES (?, ?, ?)
+                 ON CONFLICT(key) DO UPDATE SET
+                    value = excluded.value,
+                    updated_at = excluded.updated_at`,
+                [key, serializedValue, updatedAt],
+                (err) => {
+                    if (err) {
+                        reject(err);
+                        return;
+                    }
+                    resolve({ key, value: serializedValue, updatedAt });
+                }
+            );
+        });
+    }
+
+    async getWaylandInputExperimental(defaultValue = true) {
+        const raw = await this.getPreference('wayland_input_experimental', defaultValue ? '1' : '0');
+        const value = String(raw ?? '').toLowerCase();
+        return ['1', 'true', 'yes', 'on'].includes(value);
+    }
+
+    async setWaylandInputExperimental(enabled) {
+        await this.setPreference('wayland_input_experimental', enabled ? '1' : '0');
+        return { enabled: Boolean(enabled) };
     }
 }
 

@@ -3,5 +3,6 @@ node_modules
 dist/
 package-lock.json
 .DS_Store
-.github/
 dist-*/
+.clj-kondo/
+.lsp/
