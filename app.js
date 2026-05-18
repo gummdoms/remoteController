@@ -515,6 +515,22 @@ const createWindow = () => {
 
     mainWindow.loadFile(path.join(__dirname, 'index.html'));
 
+    const emitWindowState = () => {
+        if (!mainWindow || !mainWindow.webContents) {
+            return;
+        }
+        mainWindow.webContents.send('windowStateChanged', {
+            isMaximized: mainWindow.isMaximized()
+        });
+    };
+
+    mainWindow.webContents.on('did-finish-load', () => {
+        emitWindowState();
+    });
+
+    mainWindow.on('maximize', emitWindowState);
+    mainWindow.on('unmaximize', emitWindowState);
+
     mainWindow.on('minimize', (event) => {
         event.preventDefault();
         mainWindow.hide();
@@ -589,6 +605,12 @@ ipcMain.on('toggleMaximize', () => {
         mainWindow.maximize();
     }
 });
+
+ipcMain.handle('window:getState', () => {
+    return {
+        isMaximized: Boolean(mainWindow && mainWindow.isMaximized())
+    };
+});
 const server = express();
 const REQUEST_BODY_LIMIT = '10mb';
 const HTTP_PORT = Number(process.env.HTTP_PORT || 4800);
@@ -641,6 +663,196 @@ function getPrimaryLocalIPv4() {
 
     return preferred[0] || fallback[0] || null;
 }
+
+function getServiceHost() {
+    return certificateRuntimeState.ip || getPrimaryLocalIPv4() || 'localhost';
+}
+
+function getServiceUrls() {
+    const host = getServiceHost();
+    return {
+        host,
+        http: `http://${host}:${HTTP_PORT}/`,
+        https: `https://${host}:${HTTPS_PORT}/`
+    };
+}
+
+function getAutostartState() {
+    try {
+        const settings = app.getLoginItemSettings();
+        return {
+            supported: true,
+            enabled: Boolean(settings.openAtLogin)
+        };
+    } catch (error) {
+        return {
+            supported: false,
+            enabled: false,
+            message: error.message
+        };
+    }
+}
+
+function setAutostartState(enabled) {
+    const shouldEnable = Boolean(enabled);
+    const options = { openAtLogin: shouldEnable };
+
+    if (isLinux && process.env.APPIMAGE) {
+        options.path = process.env.APPIMAGE;
+    }
+
+    app.setLoginItemSettings(options);
+    return getAutostartState();
+}
+
+function getInputPermissionDiagnosis() {
+    if (!isLinux) {
+        return {
+            platform: process.platform,
+            sessionType: null,
+            needsAttention: false,
+            message: 'Diagnóstico de permisos de entrada disponible solo en Linux.',
+            checks: []
+        };
+    }
+
+    const sessionType = (process.env.XDG_SESSION_TYPE || 'unknown').toLowerCase();
+    const groupCheck = (() => {
+        try {
+            const groups = execSync('id -nG', { encoding: 'utf8' }).trim().split(/\s+/).filter(Boolean);
+            return {
+                ok: groups.includes('input') && groups.includes('uinput'),
+                groups
+            };
+        } catch (error) {
+            return {
+                ok: false,
+                groups: [],
+                error: error.message
+            };
+        }
+    })();
+
+    const uinputCheck = (() => {
+        try {
+            const exists = fs.existsSync('/dev/uinput');
+            const writable = exists ? fs.accessSync('/dev/uinput', fs.constants.R_OK | fs.constants.W_OK) === undefined : false;
+            return { ok: exists && writable, exists, writable };
+        } catch (error) {
+            return { ok: false, exists: fs.existsSync('/dev/uinput'), writable: false, error: error.message };
+        }
+    })();
+
+    const needsAttention = sessionType === 'wayland' || !groupCheck.ok || !uinputCheck.ok;
+    const checks = [
+        {
+            name: 'Sesión Linux',
+            ok: sessionType !== 'unknown',
+            details: `XDG_SESSION_TYPE=${sessionType}`
+        },
+        {
+            name: 'Grupos input/uinput',
+            ok: groupCheck.ok,
+            details: groupCheck.groups.join(' ') || groupCheck.error || 'No disponible'
+        },
+        {
+            name: 'Acceso a /dev/uinput',
+            ok: uinputCheck.ok,
+            details: `exists=${uinputCheck.exists} writable=${uinputCheck.writable}`
+        }
+    ];
+
+    const recommendedCommands = [
+        'sudo groupadd -f uinput',
+        'sudo usermod -aG input,uinput,video $USER',
+        'echo uinput | sudo tee /etc/modules-load.d/uinput.conf',
+        "echo 'KERNEL==\"uinput\", MODE=\"0660\", GROUP=\"uinput\", OPTIONS+=\"static_node=uinput\"' | sudo tee /etc/udev/rules.d/99-uinput.rules",
+        'sudo modprobe uinput',
+        'sudo udevadm control --reload-rules && sudo udevadm trigger',
+        'Reinicia sesión para aplicar grupos'
+    ];
+
+    return {
+        platform: process.platform,
+        sessionType,
+        needsAttention,
+        message: needsAttention
+            ? 'Se detectaron condiciones que pueden provocar el aviso de privilegios de entrada en Linux.'
+            : 'Configuración de permisos de entrada en buen estado.',
+        checks,
+        recommendedCommands
+    };
+}
+
+function buildLinuxInputFixScript() {
+    return [
+        'set -e',
+        'groupadd -f uinput',
+        'usermod -aG input,uinput,video "$SUDO_USER"',
+        'echo uinput > /etc/modules-load.d/uinput.conf',
+        "echo 'KERNEL==\"uinput\", MODE=\"0660\", GROUP=\"uinput\", OPTIONS+=\"static_node=uinput\"' > /etc/udev/rules.d/99-uinput.rules",
+        'modprobe uinput',
+        'udevadm control --reload-rules',
+        'udevadm trigger'
+    ].join('\n');
+}
+
+async function applyLinuxInputPermissionFix() {
+    if (!isLinux) {
+        throw new Error('Esta acción solo está disponible en Linux.');
+    }
+    if (!commandExists('pkexec')) {
+        throw new Error('pkexec no está disponible. Instala polkit para aplicar la configuración automática.');
+    }
+
+    const tempScriptPath = path.join(app.getPath('temp'), `remotecontrollers-input-fix-${Date.now()}.sh`);
+    fs.writeFileSync(tempScriptPath, buildLinuxInputFixScript(), { mode: 0o700 });
+
+    try {
+        await execCommandPromise(`pkexec /bin/bash "${tempScriptPath}"`, 'aplicar permisos de entrada linux');
+        return {
+            ok: true,
+            message: 'Configuración aplicada. Reinicia sesión para que los grupos se reflejen en tu usuario.',
+            diagnosis: getInputPermissionDiagnosis()
+        };
+    } finally {
+        try {
+            fs.unlinkSync(tempScriptPath);
+        } catch (error) {
+            // Ignorar limpieza.
+        }
+    }
+}
+
+ipcMain.handle('service:getStatus', () => {
+    return {
+        urls: getServiceUrls(),
+        autostart: getAutostartState(),
+        platform: process.platform,
+        sessionType: process.env.XDG_SESSION_TYPE || null,
+        inputDiagnosis: getInputPermissionDiagnosis()
+    };
+});
+
+ipcMain.handle('service:setAutostart', (event, payload) => {
+    return setAutostartState(Boolean(payload?.enabled));
+});
+
+ipcMain.handle('service:openUrl', async (event, payload) => {
+    const mode = payload?.mode === 'https' ? 'https' : 'http';
+    const urls = getServiceUrls();
+    const targetUrl = mode === 'https' ? urls.https : urls.http;
+    await shell.openExternal(targetUrl);
+    return { ok: true, url: targetUrl };
+});
+
+ipcMain.handle('service:diagnoseInputPermission', () => {
+    return getInputPermissionDiagnosis();
+});
+
+ipcMain.handle('service:applyInputPermissionFix', async () => {
+    return applyLinuxInputPermissionFix();
+});
 
 function findMkcertExecutable() {
     if (mkcertExecutablePath && fs.existsSync(mkcertExecutablePath)) {

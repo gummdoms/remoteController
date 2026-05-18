@@ -15,27 +15,95 @@
 
 <body>
     <header class="header">
+        <div class="brand">
+            <img src="./assets/icon.png" alt="Remote Controller" class="brand__logo">
+            <!-- <span class="brand__name">Remote Controller</span> -->
+        </div>
         <div class="container-buttons-win">
-            <button class="close-window" title="Cerrar">
-                <i class="bi bi-x-lg"></i>
-            </button>
-            <button class="minimize-window" title="Minimizar">
+            <button class="minimize-window" data-tooltip="Minimizar">
                 <i class="bi bi-dash-lg"></i>
             </button>
-            <button class="maximize-window" title="Maximizar">
+            <button class="maximize-window" data-tooltip="Maximizar">
                 <i class="bi bi-square"></i>
             </button>
         </div>
     </header>
     <main class="main">
-        <div class="content">
-            <h1>
-                Servicio remoto iniciado
-            </h1>
-            <button class="exitApp">
-                <i class="bi bi-power"></i>
-                Salir del servicio
-            </button>
+        <!-- <div class="bg-shape bg-shape--orange"></div>
+        <div class="bg-shape bg-shape--blue"></div> -->
+        <div class="content service-dashboard">
+            <section class="hero">
+                <p class="eyebrow">Remote Controller</p>
+                <div class="hero-meta-row">
+                    <div class="hero__status" id="service-status-pill">
+                        <span class="status-dot"></span>
+                        <span id="service-status-text">Cargando estado del servicio...</span>
+                    </div>
+                    <button class="btn-danger exitApp hero-exit-btn">
+                        <i class="bi bi-power"></i>
+                        Salir
+                    </button>
+                </div>
+            </section>
+
+            <section class="dashboard-grid">
+                <article class="panel-card">
+                    <div class="panel-card__head">
+                        <h2>Acceso web</h2>
+                        <span class="panel-pill" id="service-host">host: --</span>
+                    </div>
+                    <div class="url-box">
+                        <label>HTTPS (segura)</label>
+                        <code id="https-url">https://--</code>
+                        <div class="url-box__actions">
+                            <button class="btn-primary" id="open-https-url"><i class="bi bi-shield-lock"></i> Abrir
+                                segura</button>
+                            <button class="btn-ghost" id="copy-https-url"><i class="bi bi-clipboard"></i>
+                                Copiar</button>
+                        </div>
+                    </div>
+                    <div class="url-box">
+                        <label>HTTP (no segura)</label>
+                        <code id="http-url">http://--</code>
+                        <div class="url-box__actions">
+                            <button class="btn-primary" id="open-http-url"><i class="bi bi-globe"></i> Abrir no
+                                segura</button>
+                            <button class="btn-ghost" id="copy-http-url"><i class="bi bi-clipboard"></i> Copiar</button>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="panel-card">
+                    <div class="panel-card__head">
+                        <h2>Inicio del sistema</h2>
+                    </div>
+                    <label class="switch-row" for="autostart-toggle">
+                        <div>
+                            <strong>Ejecutar al iniciar el sistema</strong>
+                            <p>Compatible con Windows y Linux.</p>
+                        </div>
+                        <input type="checkbox" id="autostart-toggle">
+                        <span class="switch-ui"></span>
+                    </label>
+                    <p class="hint" id="autostart-status">Cargando...</p>
+                </article>
+
+                <article class="panel-card panel-card--full">
+                    <div class="panel-card__head">
+                        <h2>Permisos de cursor (Linux)</h2>
+                        <button class="btn-ghost" id="refresh-input-diag"><i class="bi bi-arrow-repeat"></i>
+                            Actualizar</button>
+                    </div>
+                    <p class="hint" id="input-diag-message">Analizando configuración...</p>
+                    <ul class="diag-list" id="input-diag-list"></ul>
+                    <div class="panel-actions" id="input-actions">
+                        <button class="btn-primary" id="apply-input-fix"><i class="bi bi-wrench"></i> Aplicar
+                            configuración automática</button>
+                        <button class="btn-ghost" id="show-input-commands"><i class="bi bi-terminal"></i> Ver comandos
+                            manuales</button>
+                    </div>
+                </article>
+            </section>
         </div>
         <div class="container-mp3">
             <audio src="./static/audio/volumen.mp3" id="audio" controls></audio>
