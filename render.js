@@ -124,7 +124,14 @@ $(document).ready(function () {
             renderChecks(diag.checks || []);
             latestCommands = diag.recommendedCommands || [];
             $diagMessage.text(diag.message || 'Sin diagnóstico disponible.');
-            $applyFix.prop('disabled', state?.platform !== 'linux');
+            $diagMessage.data('sessionType', state?.sessionType || '');
+            const isWayland = String(state.sessionType || '').toLowerCase() === 'wayland';
+            $applyFix.prop('disabled', state?.platform !== 'linux' || isWayland);
+            if (isWayland) {
+                $applyFix.attr('title', 'En Wayland este ajuste no evita los avisos del compositor. Usa sesión X11.');
+            } else {
+                $applyFix.removeAttr('title');
+            }
         } catch (error) {
             console.error('No se pudo cargar estado del servicio:', error);
             $statusText.text('No se pudo cargar el estado del servicio');
@@ -229,6 +236,15 @@ $(document).ready(function () {
     $applyFix.on('click', async () => {
         try {
             $applyFix.prop('disabled', true);
+            const sessionType = String(($diagMessage.data('sessionType') || '')).toLowerCase();
+            if (sessionType === 'wayland') {
+                await Swal.fire({
+                    icon: 'info',
+                    title: 'Sesión Wayland detectada',
+                    text: 'Para evitar solicitudes repetidas de control de entrada, inicia sesión en X11.'
+                });
+                return;
+            }
             const result = await api.invoke('service:applyInputPermissionFix');
             await Swal.fire({ icon: 'success', title: 'Configuración aplicada', text: result.message });
             renderChecks(result?.diagnosis?.checks || []);

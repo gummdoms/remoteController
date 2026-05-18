@@ -49,6 +49,8 @@ class TouchpadController {
         this.leftButtonHeld = false;
         this.doubleTapPending = false;
         this.singleTapMaxDuration = 220;
+        this.inputBlocked = false;
+        this.inputBlockedNotified = false;
 
         // Referencias UI para mensajes
         this.leftButtonLabel = this.btnLeftClick?.querySelector('span') ?? null;
@@ -358,7 +360,36 @@ class TouchpadController {
     }
 
     // ===== ENVIAR COMANDOS AL SERVIDOR =====
+    async handleInputResponse(response) {
+        if (response.ok) {
+            return true;
+        }
+
+        let payload = null;
+        try {
+            payload = await response.json();
+        } catch (error) {
+            payload = null;
+        }
+
+        if (response.status === 409 && payload?.code === 'WAYLAND_INPUT_RESTRICTED') {
+            this.inputBlocked = true;
+            if (!this.inputBlockedNotified && typeof Swal !== 'undefined') {
+                this.inputBlockedNotified = true;
+                Swal.fire({
+                    icon: 'info',
+                    title: 'Sesión Wayland detectada',
+                    text: payload.error || 'El control de entrada remoto está restringido en Wayland. Usa sesión X11 para evitar avisos repetidos.'
+                });
+            }
+            return false;
+        }
+
+        throw new Error(payload?.error || `HTTP ${response.status}`);
+    }
+
     sendMovement(deltaX, deltaY) {
+        if (this.inputBlocked) return;
         // Throttle para no saturar el servidor
         const now = Date.now();
         if (now - this.lastSendTime < this.throttleDelay) return;
@@ -380,10 +411,13 @@ class TouchpadController {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ dx, dy })
-        }).catch(err => console.error('Error moviendo mouse:', err));
+        })
+            .then((response) => this.handleInputResponse(response))
+            .catch(err => console.error('Error moviendo mouse:', err));
     }
 
     sendScroll(deltaY) {
+        if (this.inputBlocked) return;
         const now = Date.now();
         if (now - this.lastSendTime < this.throttleDelay * 2) return; // Más lento para scroll
         this.lastSendTime = now;
@@ -397,25 +431,34 @@ class TouchpadController {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ delta })
-        }).catch(err => console.error('Error en scroll:', err));
+        })
+            .then((response) => this.handleInputResponse(response))
+            .catch(err => console.error('Error en scroll:', err));
     }
 
     sendClick(button = 'left') {
+        if (this.inputBlocked) return;
         fetch(`${URL_API}mouse/click`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ button })
-        }).catch(err => console.error('Error en click:', err));
+        })
+            .then((response) => this.handleInputResponse(response))
+            .catch(err => console.error('Error en click:', err));
     }
 
     sendDoubleClick() {
+        if (this.inputBlocked) return;
         fetch(`${URL_API}mouse/doubleclick`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
-        }).catch(err => console.error('Error en doble click:', err));
+        })
+            .then((response) => this.handleInputResponse(response))
+            .catch(err => console.error('Error en doble click:', err));
     }
 
     sendMouseDown(button = 'left') {
+        if (this.inputBlocked) return;
         if (button === 'left' && this.leftButtonHeld) return;
 
         if (button === 'left') {
@@ -427,6 +470,7 @@ class TouchpadController {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ button })
         })
+            .then((response) => this.handleInputResponse(response))
             .catch(err => {
                 if (button === 'left') {
                     this.leftButtonHeld = false;
@@ -436,6 +480,7 @@ class TouchpadController {
     }
 
     sendMouseUp(button = 'left') {
+        if (this.inputBlocked) return;
         if (button === 'left' && !this.leftButtonHeld) return;
 
         const wasHeld = this.leftButtonHeld;
@@ -448,6 +493,7 @@ class TouchpadController {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ button })
         })
+            .then((response) => this.handleInputResponse(response))
             .catch(err => {
                 if (button === 'left' && wasHeld) {
                     this.leftButtonHeld = true;

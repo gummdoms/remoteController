@@ -32,6 +32,8 @@ const isWindows = process.platform === 'win32';
 const isLinux = process.platform === 'linux';
 const currentDesktop = (process.env.XDG_CURRENT_DESKTOP || process.env.DESKTOP_SESSION || '').toLowerCase();
 const isKDE = isLinux && /kde|plasma/.test(currentDesktop);
+const currentSessionType = (process.env.XDG_SESSION_TYPE || '').toLowerCase();
+const isWaylandSession = isLinux && currentSessionType === 'wayland';
 
 const ALERT_THRESHOLD_MS = 5 * 60 * 1000;
 const hasRobotFallback = () => Boolean(robot);
@@ -79,6 +81,19 @@ const parseBoolean = (value) => {
         return ['true', '1', 'on', 'yes'].includes(value.toLowerCase());
     }
     return Boolean(value);
+};
+const waylandInputMessage = 'En sesiones Wayland, el control remoto de entrada requiere permisos del compositor y puede mostrar avisos repetidos. Para evitarlo, inicia sesión en X11.';
+const ensureInputInjectionAvailable = (res) => {
+    if (!isWaylandSession) {
+        return true;
+    }
+    if (res) {
+        res.status(409).send({
+            error: waylandInputMessage,
+            code: 'WAYLAND_INPUT_RESTRICTED'
+        });
+    }
+    return false;
 };
 const commandExists = (binary) => {
     if (!binary) {
@@ -816,8 +831,10 @@ function getInputPermissionDiagnosis() {
     const checks = [
         {
             name: 'Sesión Linux',
-            ok: sessionType !== 'unknown',
-            details: `XDG_SESSION_TYPE=${sessionType}`
+            ok: sessionType !== 'unknown' && sessionType !== 'wayland',
+            details: sessionType === 'wayland'
+                ? 'XDG_SESSION_TYPE=wayland (puede pedir privilegios de entrada de forma repetida)'
+                : `XDG_SESSION_TYPE=${sessionType}`
         },
         {
             name: 'Grupos input/uinput',
@@ -841,23 +858,77 @@ function getInputPermissionDiagnosis() {
         'Reinicia sesión para aplicar grupos'
     ];
 
+    if (sessionType === 'wayland') {
+        recommendedCommands.unshift(
+            'Para evitar avisos repetidos de privilegios de entrada, inicia sesión en X11 (Plasma/X11 o GNOME on Xorg).'
+        );
+    }
+
     return {
         platform: process.platform,
         sessionType,
         needsAttention,
-        message: needsAttention
-            ? 'Se detectaron condiciones que pueden provocar el aviso de privilegios de entrada en Linux.'
+        message: sessionType === 'wayland'
+            ? 'Sesión Wayland detectada: el sistema puede solicitar permisos de control de entrada de forma recurrente.'
+            : needsAttention
+                ? 'Se detectaron condiciones que pueden provocar el aviso de privilegios de entrada en Linux.'
             : 'Configuración de permisos de entrada en buen estado.',
         checks,
         recommendedCommands
     };
 }
 
-function buildLinuxInputFixScript() {
+function shellSingleQuote(value) {
+    return `'${String(value).replace(/'/g, `'"'"'`)}'`;
+}
+
+function resolveLinuxTargetUser() {
+    const candidates = [
+        process.env.SUDO_USER,
+        process.env.USER,
+        process.env.LOGNAME,
+        (() => {
+            try {
+                return execSync('id -un', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+            } catch (error) {
+                return '';
+            }
+        })(),
+        (() => {
+            try {
+                return os.userInfo().username;
+            } catch (error) {
+                return '';
+            }
+        })()
+    ];
+
+    for (const candidate of candidates) {
+        const value = String(candidate || '').trim();
+        if (value && value !== 'root') {
+            return value;
+        }
+    }
+
+    return '';
+}
+
+function buildLinuxInputFixScript(targetUser) {
+    const safeUser = shellSingleQuote(targetUser);
     return [
         'set -e',
+        `TARGET_USER=${safeUser}`,
+        'if [ -z "$TARGET_USER" ]; then',
+        '  echo "No se detectó un usuario objetivo para aplicar permisos."',
+        '  exit 1',
+        'fi',
+        'if ! id "$TARGET_USER" >/dev/null 2>&1; then',
+        '  echo "El usuario objetivo no existe: $TARGET_USER"',
+        '  exit 1',
+        'fi',
+        'groupadd -f input',
         'groupadd -f uinput',
-        'usermod -aG input,uinput,video "$SUDO_USER"',
+        'usermod -aG input,uinput,video "$TARGET_USER"',
         'echo uinput > /etc/modules-load.d/uinput.conf',
         "echo 'KERNEL==\"uinput\", MODE=\"0660\", GROUP=\"uinput\", OPTIONS+=\"static_node=uinput\"' > /etc/udev/rules.d/99-uinput.rules",
         'modprobe uinput',
@@ -873,15 +944,23 @@ async function applyLinuxInputPermissionFix() {
     if (!commandExists('pkexec')) {
         throw new Error('pkexec no está disponible. Instala polkit para aplicar la configuración automática.');
     }
+    if (isWaylandSession) {
+        throw new Error('Sesión Wayland detectada. Este ajuste no evita los avisos del compositor; usa una sesión X11 para evitar solicitudes repetidas.');
+    }
+
+    const targetUser = resolveLinuxTargetUser();
+    if (!targetUser) {
+        throw new Error('No se pudo detectar el usuario de la sesión para aplicar permisos. Cierra sesión root y ejecuta la app con tu usuario normal.');
+    }
 
     const tempScriptPath = path.join(app.getPath('temp'), `remotecontrollers-input-fix-${Date.now()}.sh`);
-    fs.writeFileSync(tempScriptPath, buildLinuxInputFixScript(), { mode: 0o700 });
+    fs.writeFileSync(tempScriptPath, buildLinuxInputFixScript(targetUser), { mode: 0o700 });
 
     try {
         await execCommandPromise(`pkexec /bin/bash "${tempScriptPath}"`, 'aplicar permisos de entrada linux');
         return {
             ok: true,
-            message: 'Configuración aplicada. Reinicia sesión para que los grupos se reflejen en tu usuario.',
+            message: `Configuración aplicada para ${targetUser}. Reinicia sesión para que los grupos se reflejen en tu usuario.`,
             diagnosis: getInputPermissionDiagnosis()
         };
     } finally {
@@ -1707,6 +1786,9 @@ function handleInputPayload(body) {
 }
 
 server.post('/teclear', (req, res) => {
+    if (!ensureInputInjectionAvailable(res)) {
+        return;
+    }
     try {
         handleInputPayload(req.body || {});
         res.send({ status: 'ok' });
@@ -2078,6 +2160,9 @@ server.post('/transferirArchivo', upload.single('archivo'), (req, res) => {
 
 // Mover mouse de manera RELATIVA (como touchpad)
 server.post('/mouse/move', (req, res) => {
+    if (!ensureInputInjectionAvailable(res)) {
+        return;
+    }
     const { dx, dy } = req.body;
 
     if (typeof dx !== 'number' || typeof dy !== 'number') {
@@ -2104,6 +2189,9 @@ server.post('/mouse/move', (req, res) => {
 
 // Click
 server.post('/mouse/click', (req, res) => {
+    if (!ensureInputInjectionAvailable(res)) {
+        return;
+    }
     const { button = 'left' } = req.body;
 
     try {
@@ -2123,6 +2211,9 @@ server.post('/mouse/click', (req, res) => {
 
 // Doble click
 server.post('/mouse/doubleclick', (req, res) => {
+    if (!ensureInputInjectionAvailable(res)) {
+        return;
+    }
     try {
         if (nativeInput) {
             nativeInput.doubleClick();
@@ -2140,6 +2231,9 @@ server.post('/mouse/doubleclick', (req, res) => {
 
 // Scroll
 server.post('/mouse/scroll', (req, res) => {
+    if (!ensureInputInjectionAvailable(res)) {
+        return;
+    }
     const { delta } = req.body;
 
     if (typeof delta !== 'number') {
@@ -2213,6 +2307,9 @@ server.get('/mouse/position', (req, res) => {
 
 // Mouse down (mantener presionado)
 server.post('/mouse/down', (req, res) => {
+    if (!ensureInputInjectionAvailable(res)) {
+        return;
+    }
     const { button = 'left' } = req.body;
 
     try {
@@ -2232,6 +2329,9 @@ server.post('/mouse/down', (req, res) => {
 
 // Mouse up (soltar botón)
 server.post('/mouse/up', (req, res) => {
+    if (!ensureInputInjectionAvailable(res)) {
+        return;
+    }
     const { button = 'left' } = req.body;
 
     try {
