@@ -4,7 +4,7 @@ const https = require('https');
 const os = require('os');
 const { X509Certificate } = require('crypto');
 const path = require('path');
-const { exec, execFile, execSync } = require('child_process');
+const { exec, execFile, execSync, execFileSync } = require('child_process');
 const asyncQueue = require('async'); // Para manejar la cola de tareas
 const fs = require('fs');
 let QRCode = null;
@@ -131,12 +131,32 @@ function buildLinuxLogoutCommands() {
 
 const powerActionMap = {
     shutdown: {
-        win32: 'shutdown /s /t 0',
-        linux: 'systemctl poweroff'
+        win32: [
+            'shutdown /s /f /t 0',
+            'shutdown.exe /s /f /t 0',
+            'powershell -NoProfile -Command "Stop-Computer -Force"'
+        ],
+        linux: [
+            'systemctl poweroff -i',
+            'systemctl poweroff',
+            'loginctl poweroff',
+            'shutdown -P now',
+            'poweroff'
+        ]
     },
     restart: {
-        win32: 'shutdown /r /t 0',
-        linux: 'systemctl reboot'
+        win32: [
+            'shutdown /r /f /t 0',
+            'shutdown.exe /r /f /t 0',
+            'powershell -NoProfile -Command "Restart-Computer -Force"'
+        ],
+        linux: [
+            'systemctl reboot -i',
+            'systemctl reboot',
+            'loginctl reboot',
+            'shutdown -r now',
+            'reboot'
+        ]
     },
     suspend: {
         win32: 'rundll32.exe powrprof.dll,SetSuspendState 0,1,0',
@@ -187,17 +207,20 @@ async function runPowerCommand(action, label = action) {
         throw new Error(`La acción "${label}" no está soportada en este sistema.`);
     }
     const commands = Array.isArray(command) ? command : [command];
-    let lastError = null;
+    const failures = [];
+
     for (const cmd of commands) {
         try {
             await execCommandPromise(cmd, label);
             return;
         } catch (error) {
-            lastError = error;
+            failures.push({ cmd, error: error.message });
             console.error(`Error al ejecutar ${label} con "${cmd}":`, error.message);
         }
     }
-    throw lastError || new Error(`No se pudo ejecutar la acción "${label}".`);
+
+    const details = failures.map((entry) => `"${entry.cmd}": ${entry.error}`).join(' | ');
+    throw new Error(`No se pudo ejecutar la acción "${label}". Intentos: ${details}`);
 }
 
 async function handlePowerRequest(action, res, label) {
@@ -449,6 +472,32 @@ const queue = asyncQueue.queue(async (task, callback) => {
 
 let mainWindow;
 let tray = null;
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+
+function showMainWindow() {
+    if (!mainWindow) {
+        return;
+    }
+
+    if (mainWindow.isMinimized()) {
+        mainWindow.restore();
+    }
+
+    if (!mainWindow.isVisible()) {
+        mainWindow.show();
+    }
+
+    mainWindow.focus();
+}
+
+if (!hasSingleInstanceLock) {
+    app.quit();
+} else {
+    app.on('second-instance', () => {
+        showMainWindow();
+    });
+}
+
 const createWindow = () => {
     mainWindow = new BrowserWindow({
         width: 800,
@@ -482,21 +531,35 @@ const createWindow = () => {
 const createTray = () => {
     tray = new Tray(path.join(__dirname, 'assets', 'tray-icon.png'));
     const contextMenu = Menu.buildFromTemplate([
-        { label: 'Ver App', click: () => { mainWindow.show(); } },
+        { label: 'Ver App', click: () => { showMainWindow(); } },
         { label: 'Salir', click: () => { app.quit(); } }
     ]);
     tray.setToolTip('Remote Controller');
     tray.setContextMenu(contextMenu);
 
     tray.on('click', () => {
-        mainWindow.show();
+        showMainWindow();
     });
 };
 
-app.whenReady().then(() => {
-    createWindow();
-    createTray();
-});
+if (hasSingleInstanceLock) {
+    app.whenReady().then(() => {
+        if (!mainWindow) {
+            createWindow();
+        }
+        if (!tray) {
+            createTray();
+        }
+    });
+
+    app.on('activate', () => {
+        if (BrowserWindow.getAllWindows().length === 0) {
+            createWindow();
+        } else {
+            showMainWindow();
+        }
+    });
+}
 
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
@@ -530,9 +593,10 @@ const server = express();
 const REQUEST_BODY_LIMIT = '10mb';
 const HTTP_PORT = Number(process.env.HTTP_PORT || 4800);
 const HTTPS_PORT = Number(process.env.HTTPS_PORT || 5443);
-const CERTS_DIR = path.join(__dirname, 'certs');
-const HTTPS_KEY_PATH = process.env.HTTPS_KEY_PATH || path.join(__dirname, 'certs', 'server.key');
-const HTTPS_CERT_PATH = process.env.HTTPS_CERT_PATH || path.join(__dirname, 'certs', 'server.crt');
+const defaultCertsDir = app.isPackaged ? path.join(userDataPath, 'certs') : path.join(__dirname, 'certs');
+const CERTS_DIR = process.env.CERTS_DIR || defaultCertsDir;
+const HTTPS_KEY_PATH = process.env.HTTPS_KEY_PATH || path.join(CERTS_DIR, 'server.key');
+const HTTPS_CERT_PATH = process.env.HTTPS_CERT_PATH || path.join(CERTS_DIR, 'server.crt');
 const ROOT_CA_PUBLIC_PATH = path.join(CERTS_DIR, 'rootCA.crt');
 let mkcertExecutablePath = null;
 let httpServer = null;
@@ -661,6 +725,34 @@ function syncRootCaForClients() {
     fs.copyFileSync(rootCaPemPath, ROOT_CA_PUBLIC_PATH);
 }
 
+function ensureRootCaFileAvailable() {
+    if (fs.existsSync(ROOT_CA_PUBLIC_PATH)) {
+        return { ok: true, message: 'rootCA.crt disponible' };
+    }
+
+    try {
+        ensureDirectory(CERTS_DIR);
+        syncRootCaForClients();
+        if (fs.existsSync(ROOT_CA_PUBLIC_PATH)) {
+            return { ok: true, message: 'rootCA.crt sincronizado' };
+        }
+    } catch (error) {
+        // Intentar regeneración completa como fallback.
+    }
+
+    const regenResult = ensureLocalHttpsCertificate(false);
+    certificateRuntimeState = regenResult;
+
+    if (fs.existsSync(ROOT_CA_PUBLIC_PATH)) {
+        return { ok: true, message: 'rootCA.crt regenerado' };
+    }
+
+    return {
+        ok: false,
+        message: regenResult?.message || 'No se pudo preparar rootCA.crt'
+    };
+}
+
 function ensureLocalHttpsCertificate(force = false) {
     ensureDirectory(CERTS_DIR);
 
@@ -761,11 +853,13 @@ server.use((err, req, res, next) => {
     }
     next(err);
 });
-certificateRuntimeState = ensureLocalHttpsCertificate(false);
-if (!certificateRuntimeState.ok) {
-    console.warn(certificateRuntimeState.message);
+if (hasSingleInstanceLock) {
+    certificateRuntimeState = ensureLocalHttpsCertificate(false);
+    if (!certificateRuntimeState.ok) {
+        console.warn(certificateRuntimeState.message);
+    }
+    startApiServers();
 }
-startApiServers();
 //pagina de inicio *//los htmls se encuentran en la carpeta views
 server.use(express.static(path.join(__dirname, 'views')));
 server.use('/node_modules', express.static(path.join(__dirname, 'node_modules')));
@@ -777,10 +871,34 @@ server.get('/', (req, res) => {
 });
 
 server.get('/cert/rootca', (req, res) => {
-    if (!fs.existsSync(ROOT_CA_PUBLIC_PATH)) {
-        return res.status(404).send({ error: 'No existe rootCA.crt. Regenera el certificado.' });
+    const rootCaState = ensureRootCaFileAvailable();
+    if (!rootCaState.ok || !fs.existsSync(ROOT_CA_PUBLIC_PATH)) {
+        return res.status(404).send({
+            error: 'No existe rootCA.crt. Regenera el certificado.',
+            details: rootCaState.message
+        });
     }
-    return res.download(ROOT_CA_PUBLIC_PATH, 'rootCA.crt');
+
+    try {
+        let payload = null;
+        try {
+            payload = fs.readFileSync(ROOT_CA_PUBLIC_PATH);
+        } catch (firstError) {
+            // Reintento: regenerar/sincronizar y volver a leer.
+            const retryState = ensureRootCaFileAvailable();
+            if (!retryState.ok || !fs.existsSync(ROOT_CA_PUBLIC_PATH)) {
+                throw firstError;
+            }
+            payload = fs.readFileSync(ROOT_CA_PUBLIC_PATH);
+        }
+
+        res.setHeader('Content-Type', 'application/x-pem-file');
+        res.setHeader('Content-Disposition', 'attachment; filename="rootCA.crt"');
+        return res.send(payload);
+    } catch (error) {
+        console.error('Error al descargar rootCA.crt:', error.message);
+        return res.status(500).send({ error: 'No se pudo descargar rootCA.crt', details: error.message });
+    }
 });
 
 server.get('/cert/info', async (req, res) => {
@@ -788,6 +906,7 @@ server.get('/cert/info', async (req, res) => {
     const host = ipAddress || 'localhost';
     const rootCaDownloadUrl = `http://${host}:${HTTP_PORT}/cert/rootca`;
     const httpsUrl = `https://${host}:${HTTPS_PORT}`;
+    const rootCaState = ensureRootCaFileAvailable();
     let qrDataUrl = null;
 
     if (QRCode) {
@@ -811,7 +930,8 @@ server.get('/cert/info', async (req, res) => {
         rootCaDownloadUrl,
         qrDataUrl,
         certExists: fs.existsSync(HTTPS_CERT_PATH) && fs.existsSync(HTTPS_KEY_PATH),
-        rootCaExists: fs.existsSync(ROOT_CA_PUBLIC_PATH)
+        rootCaExists: fs.existsSync(ROOT_CA_PUBLIC_PATH),
+        rootCaMessage: rootCaState.message
     });
 });
 
@@ -909,6 +1029,9 @@ server.get('/monitores', async (req, res) => {
 });
 
 server.post('/programarApagado', (req, res) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
     try {
         const timeString = req.body?.time;
         const targetDate = resolveTargetDateFromTimeString(timeString);
@@ -931,6 +1054,9 @@ server.post('/programarApagado', (req, res) => {
 });
 
 server.get('/programarApagado', (req, res) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
     if (!scheduledShutdown) {
         res.send({ active: false });
         return;
@@ -953,6 +1079,9 @@ server.get('/programarApagado', (req, res) => {
 });
 
 server.delete('/programarApagado', (req, res) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
     const hadSchedule = clearScheduledShutdown();
     const cancelCommand = isWindows ? 'shutdown /a' : isLinux ? 'shutdown -c' : null;
     if (cancelCommand) {

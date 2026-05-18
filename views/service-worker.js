@@ -1,4 +1,4 @@
-const CACHE_NAME = 'remotecontrollers-v1';
+const CACHE_NAME = 'remotecontrollers-v2';
 const CORE_ASSETS = [
     '/',
     '/manifest.webmanifest',
@@ -46,13 +46,52 @@ self.addEventListener('fetch', (event) => {
     }
 
     const requestUrl = new URL(event.request.url);
-    if (requestUrl.pathname.startsWith('/mouse/') || requestUrl.pathname.startsWith('/teclear') || requestUrl.pathname.startsWith('/transferirArchivo')) {
+    if (requestUrl.origin !== self.location.origin) {
+        return;
+    }
+
+    const pathname = requestUrl.pathname;
+
+    // Nunca cachear endpoints dinámicos del backend.
+    const isDynamicEndpoint = !pathname.startsWith('/static/')
+        && !pathname.startsWith('/node_modules/')
+        && pathname !== '/'
+        && pathname !== '/manifest.webmanifest'
+        && pathname !== '/service-worker.js';
+
+    if (isDynamicEndpoint) {
+        return;
+    }
+
+    // Navegación: intentar red primero para evitar HTML viejo.
+    if (event.request.mode === 'navigate' || pathname === '/') {
+        event.respondWith(
+            fetch(event.request)
+                .then((response) => {
+                    if (response && response.status === 200) {
+                        const cloned = response.clone();
+                        caches.open(CACHE_NAME).then((cache) => cache.put('/', cloned));
+                    }
+                    return response;
+                })
+                .catch(() => caches.match('/') || caches.match(event.request))
+        );
         return;
     }
 
     event.respondWith(
         caches.match(event.request).then((cached) => {
             if (cached) {
+                fetch(event.request)
+                    .then((response) => {
+                        if (!response || response.status !== 200 || response.type !== 'basic') {
+                            return;
+                        }
+                        const cloned = response.clone();
+                        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, cloned));
+                    })
+                    .catch(() => { /* Ignorar fallo de actualización en segundo plano */ });
+
                 return cached;
             }
 
