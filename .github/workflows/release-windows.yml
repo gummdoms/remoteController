@@ -1,49 +1,292 @@
-name: Build Windows Installer
+name: Build And Release Desktop Apps
 
 on:
-  release:
-    types: [published]
-  workflow_dispatch:
+    push:
+        branches: [main]
+    release:
+        types: [published]
+    workflow_dispatch:
 
 permissions:
-  contents: write
+    contents: write
 
 jobs:
-  build-windows-installer:
-    runs-on: windows-latest
+    build-windows-installer:
+        if: github.event_name != 'push' || github.actor != 'github-actions[bot]'
+        runs-on: windows-latest
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+                  cache: npm
 
-      - name: Install dependencies
-        run: npm ci
+            - name: Install dependencies
+              run: npm ci
 
-      - name: Build native modules
-        run: npm run build:native
+            - name: Build native modules
+              run: npm run build:native
 
-      - name: Build styles
-        run: npm run build:sass
+            - name: Build styles
+              run: npm run build:sass
 
-      - name: Build Windows installer
-        run: npm run dist:win
+            - name: Build Windows installer
+              run: npm run dist:win
 
-      - name: Upload installer artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-installer
-          path: dist/*.exe
+            - name: Upload Windows artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: windows-installer
+                  path: dist/*.exe
 
-      - name: Attach installer to release
+    build-linux-appimage:
+        if: github.event_name != 'push' || github.actor != 'github-actions[bot]'
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+                  cache: npm
+
+            - name: Install Linux build dependencies
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y build-essential python3 make g++ libx11-dev libxtst-dev libxi-dev
+
+            - name: Install dependencies
+              run: npm ci
+
+            - name: Build native modules
+              run: npm run build:native
+
+            - name: Build styles
+              run: npm run build:sass
+
+            - name: Build Linux AppImage
+              run: npm run dist:linux
+
+            - name: Upload Linux artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: linux-appimage
+                  path: dist/*.AppImage
+
+    build-archlinux-package:
+        if: github.event_name != 'push' || github.actor != 'github-actions[bot]'
+        runs-on: ubuntu-latest
+        container: archlinux:latest
+
+        steps:
+            - name: Install Arch dependencies
+              run: |
+                  pacman -Syu --noconfirm
+                  pacman -S --noconfirm git nodejs npm base-devel python make gcc pkgconf libx11 libxtst libxext
+
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Install dependencies
+              run: npm ci
+
+            - name: Build native modules
+              run: npm run build:native
+
+            - name: Build styles
+              run: npm run build:sass
+
+            - name: Build Linux AppImage required for Arch package
+              run: npm run dist:linux
+
+            - name: Build Arch Linux package
+              run: npm run dist:arch:pkg
+
+            - name: Upload Arch Linux artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: archlinux-package
+                  path: dist/arch-pkg/*.pkg.tar.zst
+
+    publish-auto-release-main:
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.actor != 'github-actions[bot]'
+        needs:
+            [
+                build-windows-installer,
+                build-linux-appimage,
+                build-archlinux-package,
+            ]
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - name: Download Windows artifact
+              uses: actions/download-artifact@v4
+              with:
+                  name: windows-installer
+                  path: release-assets/windows
+
+            - name: Download Linux artifact
+              uses: actions/download-artifact@v4
+              with:
+                  name: linux-appimage
+                  path: release-assets/linux
+
+            - name: Download Arch Linux artifact
+              uses: actions/download-artifact@v4
+              with:
+                  name: archlinux-package
+                  path: release-assets/arch
+
+            - name: Build release notes and update README
+              id: release_meta
+              env:
+                  HEAD_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+              run: |
+                  VERSION=$(node -p "require('./package.json').version")
+                  TAG="v${VERSION}-main.${GITHUB_RUN_NUMBER}"
+                  NAME="Release v${VERSION} (build ${GITHUB_RUN_NUMBER})"
+
+                  echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+                  echo "name=${NAME}" >> "$GITHUB_OUTPUT"
+
+                  PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || true)
+                  if [[ -n "$PREV_TAG" ]]; then
+                    LOG_SOURCE="$PREV_TAG..HEAD"
+                  else
+                    LOG_SOURCE="HEAD"
+                  fi
+
+                  CHANGES=$(git log $LOG_SOURCE --pretty=format:'- %s (%h)' -n 20)
+                  if [[ -z "$CHANGES" ]]; then
+                    CHANGES='- Sin cambios detectados en commits recientes.'
+                  fi
+
+                  {
+                    echo "## Release Documentado Por Copilot"
+                    echo ""
+                    echo "- Rama: main"
+                    echo "- Commit: ${GITHUB_SHA}"
+                    echo "- Mensaje principal: ${HEAD_COMMIT_MESSAGE}"
+                    echo "- Fecha: $(date -u '+%Y-%m-%d %H:%M UTC')"
+                    echo ""
+                    echo "### Mejoras detectadas"
+                    echo "$CHANGES"
+                    echo ""
+                    echo "### Artefactos"
+                    echo "- Windows: instalador NSIS (.exe)"
+                    echo "- Linux: AppImage"
+                    echo "- Arch Linux: .pkg.tar.zst"
+                  } > release-body.md
+
+                  README_BLOCK=$(cat release-body.md)
+                  START='<!-- AUTO-RELEASE-NOTES:START -->'
+                  END='<!-- AUTO-RELEASE-NOTES:END -->'
+
+                  if grep -q "$START" README.md; then
+                    awk -v start="$START" -v end="$END" -v block="$README_BLOCK" '
+                      $0 == start { print; print block; skip=1; next }
+                      $0 == end { skip=0; print; next }
+                      !skip { print }
+                    ' README.md > README.md.tmp
+                    mv README.md.tmp README.md
+                  else
+                    {
+                      echo ""
+                      echo "$START"
+                      cat release-body.md
+                      echo "$END"
+                    } >> README.md
+                  fi
+
+            - name: Commit README update
+              run: |
+                  git config user.name "github-actions[bot]"
+                  git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+                  if ! git diff --quiet README.md; then
+                    git add README.md
+                    git commit -m "docs: actualizar resumen automatico de release [skip ci]"
+                    git push
+                  fi
+
+            - name: Create release in GitHub
+              uses: softprops/action-gh-release@v2
+              with:
+                  tag_name: ${{ steps.release_meta.outputs.tag }}
+                  name: ${{ steps.release_meta.outputs.name }}
+                  target_commitish: main
+                  body_path: release-body.md
+                  generate_release_notes: true
+                  files: |
+                      release-assets/windows/*.exe
+                      release-assets/linux/*.AppImage
+                      release-assets/arch/*.pkg.tar.zst
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    attach-assets-to-published-release:
         if: github.event_name == 'release'
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/*.exe
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        needs:
+            [
+                build-windows-installer,
+                build-linux-appimage,
+                build-archlinux-package,
+            ]
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - name: Download Windows artifact
+              uses: actions/download-artifact@v4
+              with:
+                  name: windows-installer
+                  path: release-assets/windows
+
+            - name: Download Linux artifact
+              uses: actions/download-artifact@v4
+              with:
+                  name: linux-appimage
+                  path: release-assets/linux
+
+            - name: Download Arch Linux artifact
+              uses: actions/download-artifact@v4
+              with:
+                  name: archlinux-package
+                  path: release-assets/arch
+
+            - name: Build release notes from recent commits
+              run: |
+                  CHANGES=$(git log --pretty=format:'- %s (%h)' -n 20)
+                  {
+                    echo "## Release Documentado Por Copilot"
+                    echo ""
+                    echo "### Mejoras detectadas"
+                    echo "$CHANGES"
+                  } > release-body.md
+
+            - name: Attach artifacts and update release notes
+              uses: softprops/action-gh-release@v2
+              with:
+                  body_path: release-body.md
+                  append_body: true
+                  files: |
+                      release-assets/windows/*.exe
+                      release-assets/linux/*.AppImage
+                      release-assets/arch/*.pkg.tar.zst
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
