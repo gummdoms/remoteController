@@ -133,7 +133,7 @@ body {
 .main {
   position: relative;
   height: calc(100vh - 35px - 1em);
-  overflow: hidden;
+  overflow: auto;
 }
 
 .bg-shape {

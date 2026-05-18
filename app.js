@@ -678,11 +678,32 @@ function getServiceUrls() {
 }
 
 function getAutostartState() {
+    if (isLinux) {
+        try {
+            const autostartPath = path.join(app.getPath('home'), '.config', 'autostart', 'remotecontrollers.desktop');
+            const enabled = fs.existsSync(autostartPath);
+            return {
+                supported: true,
+                enabled,
+                message: enabled
+                    ? 'Autoinicio activado en Linux.'
+                    : 'Autoinicio desactivado en Linux.'
+            };
+        } catch (error) {
+            return {
+                supported: false,
+                enabled: false,
+                message: `No se pudo leer el estado de autoinicio en Linux: ${error.message}`
+            };
+        }
+    }
+
     try {
         const settings = app.getLoginItemSettings();
         return {
             supported: true,
-            enabled: Boolean(settings.openAtLogin)
+            enabled: Boolean(settings.openAtLogin),
+            message: settings.openAtLogin ? 'Autoinicio activado.' : 'Autoinicio desactivado.'
         };
     } catch (error) {
         return {
@@ -695,14 +716,62 @@ function getAutostartState() {
 
 function setAutostartState(enabled) {
     const shouldEnable = Boolean(enabled);
+
+    if (isLinux) {
+        const autostartDir = path.join(app.getPath('home'), '.config', 'autostart');
+        const autostartPath = path.join(autostartDir, 'remotecontrollers.desktop');
+
+        try {
+            ensureDirectory(autostartDir);
+
+            if (!shouldEnable) {
+                if (fs.existsSync(autostartPath)) {
+                    fs.unlinkSync(autostartPath);
+                }
+                return {
+                    supported: true,
+                    enabled: false,
+                    message: 'Autoinicio desactivado en Linux.'
+                };
+            }
+
+            const execPath = process.env.APPIMAGE || app.getPath('exe');
+            const escapedExec = String(execPath).replace(/"/g, '\\"');
+            const desktopFile = [
+                '[Desktop Entry]',
+                'Type=Application',
+                'Version=1.0',
+                'Name=Remote Controllers',
+                'Comment=Servicio remoto',
+                `Exec="${escapedExec}"`,
+                'Terminal=false',
+                'X-GNOME-Autostart-enabled=true'
+            ].join('\n');
+
+            fs.writeFileSync(autostartPath, `${desktopFile}\n`, { mode: 0o644 });
+
+            return {
+                supported: true,
+                enabled: true,
+                message: 'Autoinicio activado en Linux.'
+            };
+        } catch (error) {
+            throw new Error(`No se pudo configurar el autoinicio en Linux: ${error.message}`);
+        }
+    }
+
     const options = { openAtLogin: shouldEnable };
 
     if (isLinux && process.env.APPIMAGE) {
         options.path = process.env.APPIMAGE;
     }
 
-    app.setLoginItemSettings(options);
-    return getAutostartState();
+    try {
+        app.setLoginItemSettings(options);
+        return getAutostartState();
+    } catch (error) {
+        throw new Error(`No se pudo configurar el autoinicio: ${error.message}`);
+    }
 }
 
 function getInputPermissionDiagnosis() {

@@ -187,13 +187,26 @@ $(document).ready(function () {
 
     $autostart.on('change', async function () {
         const enabled = $(this).is(':checked');
+        $autostart.prop('disabled', true);
         try {
             const response = await api.invoke('service:setAutostart', { enabled });
             $autostart.prop('checked', Boolean(response.enabled));
-            $autostartStatus.text(`Autoinicio ${response.enabled ? 'activado' : 'desactivado'}.`);
+
+            const message = response.message || `Autoinicio ${response.enabled ? 'activado' : 'desactivado'}.`;
+            $autostartStatus.text(message);
+
+            if (Boolean(response.enabled) !== enabled) {
+                await Swal.fire({
+                    icon: 'warning',
+                    title: 'Autoinicio no aplicado',
+                    text: message
+                });
+            }
         } catch (error) {
             $autostart.prop('checked', !enabled);
             Swal.fire({ icon: 'error', title: 'No se pudo actualizar', text: error.message || 'Error en autoinicio' });
+        } finally {
+            $autostart.prop('disabled', false);
         }
     });
 
