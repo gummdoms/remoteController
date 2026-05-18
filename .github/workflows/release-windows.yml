@@ -54,7 +54,7 @@ jobs:
                   APP_DIR="."
                   if [[ -f "DesktopApp/package.json" ]]; then APP_DIR="DesktopApp"; fi
                   cd "$APP_DIR"
-                  npm run dist:win
+                  npm run dist:win -- --publish never
 
             - name: Upload Windows artifact
               uses: actions/upload-artifact@v4
@@ -108,7 +108,7 @@ jobs:
                   APP_DIR="."
                   if [[ -f "DesktopApp/package.json" ]]; then APP_DIR="DesktopApp"; fi
                   cd "$APP_DIR"
-                  npm run dist:linux
+                  npm run dist:linux -- --publish never
 
             - name: Upload Linux artifact
               uses: actions/upload-artifact@v4
@@ -158,14 +158,18 @@ jobs:
                   APP_DIR="."
                   if [[ -f "DesktopApp/package.json" ]]; then APP_DIR="DesktopApp"; fi
                   cd "$APP_DIR"
-                  npm run dist:linux
+                  npm run dist:linux -- --publish never
 
             - name: Build Arch Linux package
               run: |
                   APP_DIR="."
                   if [[ -f "DesktopApp/package.json" ]]; then APP_DIR="DesktopApp"; fi
-                  cd "$APP_DIR"
-                  npm run dist:arch:pkg
+                  pacman -S --noconfirm shadow sudo
+                  if ! id -u builder >/dev/null 2>&1; then
+                    useradd -m builder
+                  fi
+                  chown -R builder:builder "$PWD/$APP_DIR"
+                  su builder -c "cd '$PWD/$APP_DIR' && npm run dist:arch:pkg"
 
             - name: Upload Arch Linux artifact
               uses: actions/upload-artifact@v4
