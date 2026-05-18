@@ -310,7 +310,6 @@ jobs:
                   files: |
                       release-assets/**/*.exe
                       release-assets/**/*.AppImage
-                      release-assets/**/*.appimage
                       release-assets/**/*.pkg.tar.zst
                   fail_on_unmatched_files: true
               env:
@@ -373,7 +372,6 @@ jobs:
                   files: |
                       release-assets/**/*.exe
                       release-assets/**/*.AppImage
-                      release-assets/**/*.appimage
                       release-assets/**/*.pkg.tar.zst
                   fail_on_unmatched_files: true
               env:
