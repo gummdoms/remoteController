@@ -6,14 +6,22 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "electron .",
     "dist": "electron-builder",
-    "build:native": "cd modules && npm install",
+    "dist:linux": "electron-builder --linux AppImage",
+    "dist:linux:pacman": "electron-builder --linux pacman",
+    "postinstall": "electron-builder install-app-deps",
+    "build:native": "cd modules && npm install && cd .. && electron-builder install-app-deps",
     "rebuild:native": "cd modules && npm run rebuild",
+    "rebuild:electron": "electron-builder install-app-deps",
     "build:sass": "sass static/sass/index.view.scss static/css/index.view.css",
     "watch:sass": "sass static/sass/index.view.scss static/css/index.view.css --watch",
     "test:mouse": "node modules/examples.js",
     "setup": "npm install && npm run build:native && npm run build:sass"
   },
-  "author": "Damar Narváez Martínez",
+  "author": {
+    "name": "Damar Narváez Martínez",
+    "email": "no-reply@remotecontrollers.local"
+  },
+  "homepage": "https://remotecontrollers.local",
   "license": "ISC",
   "description": "Software para control remoto de pantalla",
   "build": {
@@ -25,6 +33,19 @@
       "legalTrademarks": "BJRSOFTWARE",
       "target": [
         "nsis"
+      ]
+    },
+    "linux": {
+      "icon": "assets/icon.png",
+      "category": "Utility",
+      "maintainer": "Damar Narváez Martínez <no-reply@remotecontrollers.local>",
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
       ]
     },
     "nsis": {

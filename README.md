@@ -46,6 +46,41 @@ npm install -g sass
 sass static/sass/index.view.scss static/css/index.view.css
 ```
 
+### Arch Linux (KDE Plasma)
+
+```bash
+# Dependencias de compilación + runtime Linux/KDE
+sudo pacman -S --needed base-devel python make gcc pkgconf libx11 libxtst libxext \
+    xorg-xrandr kscreen ddcutil brightnessctl pipewire wireplumber
+
+# Permisos para ddcutil (reinicia sesión después de esto)
+sudo gpasswd -a "$USER" i2c
+sudo gpasswd -a "$USER" video
+
+# Instalar dependencias y compilar nativos para Electron
+npm install
+npm run build:native
+
+# Compilar estilos
+npm run build:sass
+
+# Ejecutar
+npm start
+```
+
+Empaquetado para Linux (estable):
+
+```bash
+npm run dist:linux
+```
+
+Empaquetado pacman (opcional para Arch):
+
+```bash
+sudo pacman -S --needed libxcrypt-compat
+npm run dist:linux:pacman
+```
+
 ### Ejecutar
 
 ```powershell
