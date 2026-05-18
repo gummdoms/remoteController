@@ -388,13 +388,16 @@ Si tienes preguntas o problemas, revisa `INSTALL.md` para una guía más detalla
 ## Release Documentado Por Copilot
 
 - Rama: main
-- Commit: d0ae8f724c66a51eabee26bf3e7b767b2f711c55
-- Mensaje principal: Merge pull request #6 from gummdoms/DamarN/dev
+- Commit: 74f6ea52ab9e7a38dde114c1fc87bc40f5e2bf50
+- Mensaje principal: Merge pull request #7 from gummdoms/DamarN/dev
 
 Actions Generar Assets separados
-- Fecha: 2026-05-18 18:49 UTC
+- Fecha: 2026-05-18 18:56 UTC
 
 ### Mejoras detectadas
+- Merge pull request #7 from gummdoms/DamarN/dev (74f6ea5)
+- Actions Generar Assets separados (f4f54f3)
+- docs: actualizar resumen automatico de release [skip ci] (001549f)
 - Merge pull request #6 from gummdoms/DamarN/dev (d0ae8f7)
 - Actions Generar Assets separados (44a5c52)
 
