@@ -130,7 +130,7 @@ jobs:
             - name: Install Arch dependencies
               run: |
                   pacman -Syu --noconfirm
-                  pacman -S --noconfirm nodejs npm base-devel python make gcc pkgconf libx11 libxtst libxext
+                  pacman -S --noconfirm nodejs npm base-devel python make gcc pkgconf libx11 libxtst libxext libxrandr
 
             - name: Install dependencies
               run: |
