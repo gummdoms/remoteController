@@ -289,8 +289,15 @@ jobs:
                   if ! git diff --quiet "$README_PATH"; then
                     git add "$README_PATH"
                     git commit -m "docs: actualizar resumen automatico de release [skip ci]"
-                    git push
+                    if ! git push; then
+                      echo "No se pudo hacer push por protección de rama. Se continúa sin actualizar README en main." 
+                    fi
                   fi
+
+            - name: Verify downloaded assets
+              run: |
+                  echo "Assets descargados:" 
+                  find release-assets -type f | sort || true
 
             - name: Create release in GitHub
               uses: softprops/action-gh-release@v2
@@ -301,9 +308,11 @@ jobs:
                   body_path: release-body.md
                   generate_release_notes: true
                   files: |
-                      release-assets/windows/*.exe
-                      release-assets/linux/*.AppImage
-                      release-assets/arch/*.pkg.tar.zst
+                      release-assets/**/*.exe
+                      release-assets/**/*.AppImage
+                      release-assets/**/*.appimage
+                      release-assets/**/*.pkg.tar.zst
+                  fail_on_unmatched_files: true
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -351,14 +360,21 @@ jobs:
                     echo "$CHANGES"
                   } > release-body.md
 
+            - name: Verify downloaded assets
+              run: |
+                  echo "Assets descargados:" 
+                  find release-assets -type f | sort || true
+
             - name: Attach artifacts and update release notes
               uses: softprops/action-gh-release@v2
               with:
                   body_path: release-body.md
                   append_body: true
                   files: |
-                      release-assets/windows/*.exe
-                      release-assets/linux/*.AppImage
-                      release-assets/arch/*.pkg.tar.zst
+                      release-assets/**/*.exe
+                      release-assets/**/*.AppImage
+                      release-assets/**/*.appimage
+                      release-assets/**/*.pkg.tar.zst
+                  fail_on_unmatched_files: true
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
