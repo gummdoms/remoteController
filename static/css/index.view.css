@@ -1,5 +1,4 @@
 @charset "UTF-8";
-
 *,
 *::after,
 *::before {
@@ -402,17 +401,13 @@
 }
 
 @keyframes bounce {
-
-  0%,
-  100% {
+  0%, 100% {
     transform: translateY(0);
   }
-
   50% {
     transform: translateY(-10px);
   }
 }
-
 @media (max-width: 768px) {
   .container-touchpad {
     max-width: none;
@@ -420,23 +415,19 @@
     right: 0;
     border-radius: 25px 25px 0 0;
   }
-
   .container-touchpad .touchpad-area {
     height: 250px;
   }
-
   .btn-touchpad-show {
     bottom: 70px;
     right: 15px;
     width: 55px;
     height: 55px;
   }
-
   .btn-touchpad-show i {
     font-size: 1.6rem;
   }
 }
-
 .btn-teclado-show {
   bottom: 20px !important;
 }
@@ -667,31 +658,25 @@
   .modal-power-off {
     padding: 16px;
   }
-
   .modal-power-off .container-power-off {
     padding: 20px;
   }
-
   .modal-power-off .footer-power-off {
     flex-direction: column;
   }
-
   .modal-power-off .footer-power-off .btn {
     width: 100%;
   }
-
   .shutdown-banner {
     width: calc(100% - 32px);
     left: 16px;
     right: 16px;
     transform: translate(0, -10px);
   }
-
   .shutdown-banner.is-visible {
     transform: translate(0, 0);
   }
 }
-
 .container-modules-5 .mouse-config-card {
   background-color: #333;
   border-radius: 6px;
@@ -2082,12 +2067,10 @@ body {
   0% {
     transform: rotate(0deg);
   }
-
   100% {
     transform: rotate(360deg);
   }
 }
-
 .modal-transfer {
   position: fixed;
   inset: 0;
@@ -2283,5 +2266,7 @@ body {
 .modal-transfer .transfer-footer .btn-transfer-cancel {
   background: #444;
 }
+
+
 
 /*# sourceMappingURL=index.view.css.map */
