@@ -388,33 +388,15 @@ Si tienes preguntas o problemas, revisa `INSTALL.md` para una guía más detalla
 ## Release Documentado Por Copilot
 
 - Rama: main
-- Commit: d23ae72ed69be6a05905bc867be86683dcb0ea98
-- Mensaje principal: Merge pull request #5 from gummdoms/DamarN/dev
+- Commit: d0ae8f724c66a51eabee26bf3e7b767b2f711c55
+- Mensaje principal: Merge pull request #6 from gummdoms/DamarN/dev
 
-Actions Archvilinux
-- Fecha: 2026-05-18 18:37 UTC
+Actions Generar Assets separados
+- Fecha: 2026-05-18 18:49 UTC
 
 ### Mejoras detectadas
-- Merge pull request #5 from gummdoms/DamarN/dev (d23ae72)
-- Actions Archvilinux (f743b1d)
-- Merge pull request #4 from gummdoms/DamarN/dev (2adde8c)
-- Actions fix (42f5129)
-- Merge pull request #3 from gummdoms/DamarN/dev (f6e3126)
-- Actions (6d83922)
-- Merge pull request #2 from gummdoms/DamarN/dev (c2e383f)
-- Actions (25487b1)
-- Merge pull request #1 from gummdoms/DamarN/dev (4b50382)
-- Actions (8e24c54)
-- Actions (35072d2)
-- compositor linux (a560094)
-- Ajuste de control de cursor (a19aba1)
-- Ajuste de autoinicio (34428a9)
-- feat: mejorar diseño y funcionalidad de las secciones de URL en la interfaz (c6def8b)
-- feat: enhance UI and functionality of the remote controller application (fd916a1)
-- feat: mejorar gestión de certificados y actualizar service worker para recarga automática (90fee6a)
-- feat: replace vcxproj with Makefile for mouse_controller build system (1b42291)
-- Proyecto (2d80dd4)
-- feat: Añadir gestión de certificados HTTPS con interfaz modal y generación automática (ec3afbc)
+- Merge pull request #6 from gummdoms/DamarN/dev (d0ae8f7)
+- Actions Generar Assets separados (44a5c52)
 
 ### Artefactos
 - Windows: instalador NSIS (.exe)
