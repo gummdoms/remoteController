@@ -14,6 +14,9 @@ jobs:
     build-windows-installer:
         if: github.event_name != 'push' || github.actor != 'github-actions[bot]'
         runs-on: windows-latest
+        defaults:
+            run:
+                working-directory: DesktopApp
 
         steps:
             - name: Checkout
@@ -23,10 +26,9 @@ jobs:
               uses: actions/setup-node@v4
               with:
                   node-version: 20
-                  cache: npm
 
             - name: Install dependencies
-              run: npm ci
+              run: npm install
 
             - name: Build native modules
               run: npm run build:native
@@ -41,11 +43,14 @@ jobs:
               uses: actions/upload-artifact@v4
               with:
                   name: windows-installer
-                  path: dist/*.exe
+                  path: DesktopApp/dist/*.exe
 
     build-linux-appimage:
         if: github.event_name != 'push' || github.actor != 'github-actions[bot]'
         runs-on: ubuntu-latest
+        defaults:
+            run:
+                working-directory: DesktopApp
 
         steps:
             - name: Checkout
@@ -55,7 +60,6 @@ jobs:
               uses: actions/setup-node@v4
               with:
                   node-version: 20
-                  cache: npm
 
             - name: Install Linux build dependencies
               run: |
@@ -63,7 +67,7 @@ jobs:
                   sudo apt-get install -y build-essential python3 make g++ libx11-dev libxtst-dev libxi-dev
 
             - name: Install dependencies
-              run: npm ci
+              run: npm install
 
             - name: Build native modules
               run: npm run build:native
@@ -78,24 +82,27 @@ jobs:
               uses: actions/upload-artifact@v4
               with:
                   name: linux-appimage
-                  path: dist/*.AppImage
+                  path: DesktopApp/dist/*.AppImage
 
     build-archlinux-package:
         if: github.event_name != 'push' || github.actor != 'github-actions[bot]'
         runs-on: ubuntu-latest
         container: archlinux:latest
+        defaults:
+            run:
+                working-directory: DesktopApp
 
         steps:
-            - name: Install Arch dependencies
-              run: |
-                  pacman -Syu --noconfirm
-                  pacman -S --noconfirm git nodejs npm base-devel python make gcc pkgconf libx11 libxtst libxext
-
             - name: Checkout
               uses: actions/checkout@v4
 
+            - name: Install Arch dependencies
+              run: |
+                  pacman -Syu --noconfirm
+                  pacman -S --noconfirm nodejs npm base-devel python make gcc pkgconf libx11 libxtst libxext
+
             - name: Install dependencies
-              run: npm ci
+              run: npm install
 
             - name: Build native modules
               run: npm run build:native
@@ -113,7 +120,7 @@ jobs:
               uses: actions/upload-artifact@v4
               with:
                   name: archlinux-package
-                  path: dist/arch-pkg/*.pkg.tar.zst
+                  path: DesktopApp/dist/arch-pkg/*.pkg.tar.zst
 
     publish-auto-release-main:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.actor != 'github-actions[bot]'
@@ -135,26 +142,26 @@ jobs:
               uses: actions/download-artifact@v4
               with:
                   name: windows-installer
-                  path: release-assets/windows
+                  path: DesktopApp/release-assets/windows
 
             - name: Download Linux artifact
               uses: actions/download-artifact@v4
               with:
                   name: linux-appimage
-                  path: release-assets/linux
+                  path: DesktopApp/release-assets/linux
 
             - name: Download Arch Linux artifact
               uses: actions/download-artifact@v4
               with:
                   name: archlinux-package
-                  path: release-assets/arch
+                  path: DesktopApp/release-assets/arch
 
             - name: Build release notes and update README
               id: release_meta
               env:
                   HEAD_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
               run: |
-                  VERSION=$(node -p "require('./package.json').version")
+                  VERSION=$(node -p "require('./DesktopApp/package.json').version")
                   TAG="v${VERSION}-main.${GITHUB_RUN_NUMBER}"
                   NAME="Release v${VERSION} (build ${GITHUB_RUN_NUMBER})"
 
@@ -188,34 +195,34 @@ jobs:
                     echo "- Windows: instalador NSIS (.exe)"
                     echo "- Linux: AppImage"
                     echo "- Arch Linux: .pkg.tar.zst"
-                  } > release-body.md
+                  } > DesktopApp/release-body.md
 
-                  README_BLOCK=$(cat release-body.md)
+                  README_BLOCK=$(cat DesktopApp/release-body.md)
                   START='<!-- AUTO-RELEASE-NOTES:START -->'
                   END='<!-- AUTO-RELEASE-NOTES:END -->'
 
-                  if grep -q "$START" README.md; then
+                  if grep -q "$START" DesktopApp/README.md; then
                     awk -v start="$START" -v end="$END" -v block="$README_BLOCK" '
                       $0 == start { print; print block; skip=1; next }
                       $0 == end { skip=0; print; next }
                       !skip { print }
-                    ' README.md > README.md.tmp
-                    mv README.md.tmp README.md
+                    ' DesktopApp/README.md > DesktopApp/README.md.tmp
+                    mv DesktopApp/README.md.tmp DesktopApp/README.md
                   else
                     {
                       echo ""
                       echo "$START"
-                      cat release-body.md
+                      cat DesktopApp/release-body.md
                       echo "$END"
-                    } >> README.md
+                    } >> DesktopApp/README.md
                   fi
 
             - name: Commit README update
               run: |
                   git config user.name "github-actions[bot]"
                   git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-                  if ! git diff --quiet README.md; then
-                    git add README.md
+                  if ! git diff --quiet DesktopApp/README.md; then
+                    git add DesktopApp/README.md
                     git commit -m "docs: actualizar resumen automatico de release [skip ci]"
                     git push
                   fi
@@ -226,12 +233,12 @@ jobs:
                   tag_name: ${{ steps.release_meta.outputs.tag }}
                   name: ${{ steps.release_meta.outputs.name }}
                   target_commitish: main
-                  body_path: release-body.md
+                  body_path: DesktopApp/release-body.md
                   generate_release_notes: true
                   files: |
-                      release-assets/windows/*.exe
-                      release-assets/linux/*.AppImage
-                      release-assets/arch/*.pkg.tar.zst
+                      DesktopApp/release-assets/windows/*.exe
+                      DesktopApp/release-assets/linux/*.AppImage
+                      DesktopApp/release-assets/arch/*.pkg.tar.zst
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -255,19 +262,19 @@ jobs:
               uses: actions/download-artifact@v4
               with:
                   name: windows-installer
-                  path: release-assets/windows
+                  path: DesktopApp/release-assets/windows
 
             - name: Download Linux artifact
               uses: actions/download-artifact@v4
               with:
                   name: linux-appimage
-                  path: release-assets/linux
+                  path: DesktopApp/release-assets/linux
 
             - name: Download Arch Linux artifact
               uses: actions/download-artifact@v4
               with:
                   name: archlinux-package
-                  path: release-assets/arch
+                  path: DesktopApp/release-assets/arch
 
             - name: Build release notes from recent commits
               run: |
@@ -277,16 +284,16 @@ jobs:
                     echo ""
                     echo "### Mejoras detectadas"
                     echo "$CHANGES"
-                  } > release-body.md
+                  } > DesktopApp/release-body.md
 
             - name: Attach artifacts and update release notes
               uses: softprops/action-gh-release@v2
               with:
-                  body_path: release-body.md
+                  body_path: DesktopApp/release-body.md
                   append_body: true
                   files: |
-                      release-assets/windows/*.exe
-                      release-assets/linux/*.AppImage
-                      release-assets/arch/*.pkg.tar.zst
+                      DesktopApp/release-assets/windows/*.exe
+                      DesktopApp/release-assets/linux/*.AppImage
+                      DesktopApp/release-assets/arch/*.pkg.tar.zst
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
