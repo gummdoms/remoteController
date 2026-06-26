@@ -496,7 +496,7 @@
       "deps/amaro/dist/index.js"
     ],
     "ossfuzz": "false",
-    "nodedir": "/home/bjrzum/.cache/node-gyp/24.15.0",
+    "nodedir": "/tmp/cursor-sandbox-cache/955fe9cc738a031fa5f7e2a30944cf1c/node-gyp/24.15.0",
     "python": "/usr/bin/python3",
     "standalone_static_library": 1,
     "global_prefix": "/home/bjrzum/.local/share/fnm/node-versions/v24.15.0/installation",
@@ -507,7 +507,7 @@
     "init_module": "/home/bjrzum/.npm-init.js",
     "globalconfig": "/home/bjrzum/.local/share/fnm/node-versions/v24.15.0/installation/etc/npmrc",
     "local_prefix": "/mnt/workspace/Documents/2. Proyectos/finish/EJS-remoteControllers/DesktopApp/modules",
-    "cache": "/home/bjrzum/.npm",
+    "cache": "/tmp/cursor-sandbox-cache/955fe9cc738a031fa5f7e2a30944cf1c/npm",
     "userconfig": "/home/bjrzum/.npmrc"
   },
   "target_defaults": {
