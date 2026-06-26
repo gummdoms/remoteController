@@ -5,6 +5,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "electron .",
+    "start:prod": "CLOUD_SERVER_URL=https://remote-controller.bjrsoftware.uk electron .",
     "dist": "electron-builder",
     "dist:win": "electron-builder --win nsis",
     "dist:linux": "electron-builder --linux AppImage",
@@ -15,6 +16,9 @@
     "rebuild:native": "cd modules && npm run rebuild",
     "rebuild:electron": "electron-builder install-app-deps",
     "build:sass": "sass static/sass/index.view.scss static/css/index.view.css",
+    "build:sass:web": "sass web/static/sass/index.view.scss web/static/css/index.view.css",
+    "web:install": "cd web && npm install",
+    "web:start": "cd web && npm start",
     "watch:sass": "sass static/sass/index.view.scss static/css/index.view.css --watch",
     "test:mouse": "node modules/examples.js",
     "setup": "npm install && npm run build:native && npm run build:sass"
@@ -80,7 +84,8 @@
     "open": "^10.2.0",
     "qrcode": "^1.5.4",
     "sqlite3": "^5.1.7",
-    "sweetalert2": "^11.26.1"
+    "sweetalert2": "^11.26.1",
+    "ws": "^8.21.0"
   },
   "optionalDependencies": {
     "@hensm/ddcci": "^0.1.0",

@@ -296,8 +296,117 @@ body {
   margin-bottom: 6px;
 }
 
+.hero-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.auth-screen {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: calc(100vh - 35px);
+    padding: 24px;
+}
+
+.auth-screen__card {
+    width: min(420px, 100%);
+    padding: 28px;
+    border-radius: 18px;
+    border: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.03);
+    box-shadow: var(--shadow);
+}
+
+.auth-screen__brand {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.auth-screen__brand img {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+}
+
+.auth-screen__brand h1 {
+    margin: 0;
+    font-size: 24px;
+}
+
+.auth-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin: 18px 0;
+    padding: 4px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.auth-tabs button {
+    border: 0;
+    background: transparent;
+    color: var(--ink-2);
+    padding: 10px 12px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.auth-tabs button.active {
+    background: linear-gradient(135deg, var(--blue), #6d5cff);
+    color: white;
+}
+
+.field {
+    display: grid;
+    gap: 6px;
+    margin-bottom: 14px;
+}
+
+.field label {
+    font-size: 13px;
+    color: var(--ink-2);
+}
+
+.rename-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+}
+
+.pairing-box {
+    margin: 16px 0;
+    padding: 16px;
+    border-radius: 14px;
+    background: rgba(79, 140, 255, 0.08);
+    border: 1px solid rgba(79, 140, 255, 0.18);
+}
+
+.pairing-box code {
+    display: block;
+    font-size: 32px;
+    letter-spacing: 0.3em;
+    margin: 10px 0;
+    color: #dbeafe;
+}
+
+.cloud-input {
+    width: 100%;
+    margin-top: 8px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.04);
+    color: inherit;
+}
+
 .url-box code {
-  display: none;
+  display: block;
   word-break: break-all;
   color: #a8d9ff;
   background: rgba(255, 255, 255, 0.04);

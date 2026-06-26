@@ -1,10 +1,13 @@
 $(document).ready(function () {
     const api = window.ipcRenderer;
+    const $authScreen = $('#auth-screen');
+    const $dashboardScreen = $('#dashboard-screen');
     const $maximizeButton = $('.maximize-window');
     const $statusText = $('#service-status-text');
-    const $host = $('#service-host');
-    const $httpsUrl = $('#https-url');
-    const $httpUrl = $('#http-url');
+    const $cloudStatusPill = $('#cloud-status-pill');
+    const $cloudStatusMessage = $('#cloud-status-message');
+    const $userInfo = $('#user-info');
+    const $renameDevice = $('#rename-device');
     const $autostart = $('#autostart-toggle');
     const $autostartStatus = $('#autostart-status');
     const $diagList = $('#input-diag-list');
@@ -14,6 +17,7 @@ $(document).ready(function () {
     const $waylandToggle = $('#wayland-experimental-toggle');
     const $waylandStatus = $('#wayland-experimental-status');
 
+    let authMode = 'login';
     let latestCommands = [];
     let tooltipTarget = null;
 
@@ -26,72 +30,37 @@ $(document).ready(function () {
         $maximizeButton.find('i').attr('class', isMaximized ? 'bi bi-fullscreen-exit' : 'bi bi-square');
     };
 
-    const migrateNativeTitles = () => {
-        $('[title]').each(function () {
-            const value = $(this).attr('title');
-            if (value && !$(this).attr('data-tooltip')) {
-                $(this).attr('data-tooltip', value);
-            }
-            $(this).removeAttr('title');
-        });
+    const showAuthScreen = () => {
+        $authScreen.show();
+        $dashboardScreen.hide();
     };
 
-    const positionTooltip = (event) => {
-        if (!tooltipTarget || !$tooltip.hasClass('is-visible')) {
-            return;
+    const showDashboard = () => {
+        $authScreen.hide();
+        $dashboardScreen.show();
+    };
+
+    const renderCloudState = (cloud = {}, auth = {}) => {
+        const connected = Boolean(cloud.connected);
+        const paired = Boolean(cloud.deviceId);
+
+        $cloudStatusPill.text(connected ? 'En línea' : 'Desconectado');
+
+        if (auth.user) {
+            $userInfo.text(`Sesión: ${auth.user.name || auth.user.email}`);
         }
 
-        const tooltipEl = $tooltip[0];
-        const margin = 12;
-        let left;
-        let top;
-
-        if (event && Number.isFinite(event.clientX) && Number.isFinite(event.clientY)) {
-            left = event.clientX + 14;
-            top = event.clientY + 18;
+        if (paired && connected) {
+            $cloudStatusMessage.text(`"${cloud.deviceName || 'Mi PC'}" listo para control remoto desde la web.`);
+        } else if (paired) {
+            $cloudStatusMessage.text('Reconectando con el servidor...');
         } else {
-            const rect = tooltipTarget.getBoundingClientRect();
-            left = rect.left + (rect.width / 2) - (tooltipEl.offsetWidth / 2);
-            top = rect.top - tooltipEl.offsetHeight - 10;
+            $cloudStatusMessage.text('Equipo no registrado todavía.');
         }
 
-        const maxLeft = window.innerWidth - tooltipEl.offsetWidth - margin;
-        const maxTop = window.innerHeight - tooltipEl.offsetHeight - margin;
-
-        left = Math.max(margin, Math.min(maxLeft, left));
-        top = Math.max(margin, Math.min(maxTop, top));
-
-        $tooltip.css({ left: `${left}px`, top: `${top}px` });
-    };
-
-    const showTooltip = (target, event) => {
-        const text = target.getAttribute('data-tooltip');
-        if (!text) {
-            return;
+        if (cloud.deviceName) {
+            $renameDevice.val(cloud.deviceName);
         }
-        tooltipTarget = target;
-        $tooltip.text(text).addClass('is-visible');
-        positionTooltip(event);
-    };
-
-    const hideTooltip = () => {
-        tooltipTarget = null;
-        $tooltip.removeClass('is-visible');
-    };
-
-    const copyToClipboard = async (value) => {
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-            await navigator.clipboard.writeText(value);
-            return;
-        }
-        const textarea = document.createElement('textarea');
-        textarea.value = value;
-        textarea.style.position = 'fixed';
-        textarea.style.opacity = '0';
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand('copy');
-        textarea.remove();
     };
 
     const renderChecks = (checks = []) => {
@@ -107,13 +76,18 @@ $(document).ready(function () {
     const refreshServiceState = async () => {
         try {
             const state = await api.invoke('service:getStatus');
-            const urls = state?.urls || {};
+            const auth = state?.auth || {};
+            const cloud = state?.cloud || {};
             const diag = state?.inputDiagnosis || {};
 
-            $statusText.text(`Servicio activo en ${state?.platform || 'desconocido'}${state?.sessionType ? ` (${state.sessionType})` : ''}`);
-            $host.text(`host: ${urls.host || '--'}`);
-            $httpsUrl.text(urls.https || 'https://--');
-            $httpUrl.text(urls.http || 'http://--');
+            if (auth.loggedIn) {
+                showDashboard();
+            } else {
+                showAuthScreen();
+            }
+
+            $statusText.text(`Agente en ${state?.platform || 'desconocido'}${state?.sessionType ? ` (${state.sessionType})` : ''}`);
+            renderCloudState(cloud, auth);
 
             const autostart = state?.autostart || { supported: false, enabled: false };
             $autostart.prop('checked', Boolean(autostart.enabled));
@@ -130,11 +104,6 @@ $(document).ready(function () {
             $diagMessage.data('sessionType', state?.sessionType || '');
             const isWayland = String(state.sessionType || '').toLowerCase() === 'wayland';
             $applyFix.prop('disabled', state?.platform !== 'linux');
-            if (isWayland) {
-                $applyFix.attr('title', 'En Wayland esta acción muestra información y no elimina avisos del compositor.');
-            } else {
-                $applyFix.removeAttr('title');
-            }
 
             const inputControl = state?.inputControl || {};
             const showWaylandControls = Boolean(inputControl.waylandExperimentalAvailable);
@@ -144,11 +113,10 @@ $(document).ready(function () {
             if (showWaylandControls) {
                 const enabled = Boolean(inputControl.waylandExperimentalEnabled);
                 $waylandToggle.prop('checked', enabled);
-                $waylandToggle.prop('disabled', false);
                 $waylandStatus.text(
                     enabled
-                        ? 'Modo Wayland experimental activado: se intentará controlar entrada (puede pedir confirmación).' 
-                        : 'Modo Wayland experimental desactivado: control de cursor y teclado remoto bloqueado en Wayland.'
+                        ? 'Modo Wayland experimental activado.'
+                        : 'Modo Wayland experimental desactivado.'
                 );
             }
         } catch (error) {
@@ -157,26 +125,78 @@ $(document).ready(function () {
         }
     };
 
-    $(document).on('click', '.minimize-window', function () {
-        api.send('minimizeApp');
+    $('.auth-tabs button').on('click', function () {
+        authMode = $(this).data('auth-mode');
+        $('.auth-tabs button').removeClass('active');
+        $(this).addClass('active');
+        $('.register-only').toggle(authMode === 'register');
+        $('#auth-submit').text(authMode === 'register' ? 'Crear cuenta' : 'Entrar');
+        $('.auth-screen__brand h1').text(authMode === 'register' ? 'Crear cuenta' : 'Inicia sesión');
     });
 
-    $(document).on('click', '.maximize-window', function () {
-        api.send('toggleMaximize');
+    $('#auth-form').on('submit', async function (event) {
+        event.preventDefault();
+        const payload = {
+            email: $('#auth-email').val().trim(),
+            password: $('#auth-password').val(),
+            name: $('#auth-name').val().trim(),
+            deviceName: $('#device-name').val().trim()
+        };
+
+        $('#auth-submit').prop('disabled', true);
+
+        try {
+            if (authMode === 'register') {
+                await api.invoke('auth:register', payload);
+            } else {
+                await api.invoke('auth:login', payload);
+            }
+            await refreshServiceState();
+        } catch (error) {
+            Swal.fire({ icon: 'error', title: 'Error', text: error.message || 'No se pudo completar la autenticación.' });
+        } finally {
+            $('#auth-submit').prop('disabled', false);
+        }
     });
 
-    $(document).on('click', '.close-window', function () {
-        api.send('closeApp');
+    $('#logout-btn').on('click', async () => {
+        const result = await Swal.fire({
+            title: '¿Cerrar sesión?',
+            text: 'Otro usuario podrá iniciar sesión en este equipo.',
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonText: 'Cerrar sesión'
+        });
+        if (!result.isConfirmed) {
+            return;
+        }
+        await api.invoke('auth:logout');
+        showAuthScreen();
+        await refreshServiceState();
     });
 
-    $(document).on('click', '.exitApp', function () {
+    $('#save-device-name').on('click', async () => {
+        try {
+            const name = $renameDevice.val().trim();
+            if (!name) {
+                throw new Error('El nombre no puede estar vacío.');
+            }
+            await api.invoke('auth:renameDevice', { name });
+            await refreshServiceState();
+            Swal.fire({ icon: 'success', title: 'Nombre actualizado', timer: 1200, showConfirmButton: false });
+        } catch (error) {
+            Swal.fire({ icon: 'error', title: 'Error', text: error.message || 'No se pudo actualizar el nombre.' });
+        }
+    });
+
+    $(document).on('click', '.minimize-window', () => api.send('minimizeApp'));
+    $(document).on('click', '.maximize-window', () => api.send('toggleMaximize'));
+    $(document).on('click', '.exitApp', () => {
         Swal.fire({
             title: '¿Estás seguro?',
             text: '¿Quieres cerrar la aplicación?',
             icon: 'warning',
             showCancelButton: true,
-            confirmButtonColor: '#3085d6',
-            cancelButtonColor: '#d33',
             confirmButtonText: 'Salir'
         }).then((result) => {
             if (result.isConfirmed) {
@@ -185,30 +205,16 @@ $(document).ready(function () {
         });
     });
 
-    $('#open-https-url').on('click', async () => {
-        await api.invoke('service:openUrl', { mode: 'https' });
+    $('#open-web-url').on('click', async () => {
+        await api.invoke('service:openUrl');
     });
 
-    $('#open-http-url').on('click', async () => {
-        await api.invoke('service:openUrl', { mode: 'http' });
+    api.on('cloud:statusChanged', () => {
+        refreshServiceState();
     });
 
-    $('#copy-https-url').on('click', async () => {
-        try {
-            await copyToClipboard($httpsUrl.text().trim());
-            Swal.fire({ icon: 'success', title: 'Copiado', text: 'URL HTTPS copiada al portapapeles', timer: 1400, showConfirmButton: false });
-        } catch (error) {
-            Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo copiar la URL' });
-        }
-    });
-
-    $('#copy-http-url').on('click', async () => {
-        try {
-            await copyToClipboard($httpUrl.text().trim());
-            Swal.fire({ icon: 'success', title: 'Copiado', text: 'URL HTTP copiada al portapapeles', timer: 1400, showConfirmButton: false });
-        } catch (error) {
-            Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo copiar la URL' });
-        }
+    api.on('auth:stateChanged', () => {
+        refreshServiceState();
     });
 
     $autostart.on('change', async function () {
@@ -217,17 +223,7 @@ $(document).ready(function () {
         try {
             const response = await api.invoke('service:setAutostart', { enabled });
             $autostart.prop('checked', Boolean(response.enabled));
-
-            const message = response.message || `Autoinicio ${response.enabled ? 'activado' : 'desactivado'}.`;
-            $autostartStatus.text(message);
-
-            if (Boolean(response.enabled) !== enabled) {
-                await Swal.fire({
-                    icon: 'warning',
-                    title: 'Autoinicio no aplicado',
-                    text: message
-                });
-            }
+            $autostartStatus.text(response.message || `Autoinicio ${response.enabled ? 'activado' : 'desactivado'}.`);
         } catch (error) {
             $autostart.prop('checked', !enabled);
             Swal.fire({ icon: 'error', title: 'No se pudo actualizar', text: error.message || 'Error en autoinicio' });
@@ -241,7 +237,6 @@ $(document).ready(function () {
         renderChecks(response.checks || []);
         latestCommands = response.recommendedCommands || [];
         $diagMessage.text(response.message || 'Sin diagnóstico disponible.');
-        $diagMessage.data('sessionType', response?.sessionType || '');
     });
 
     $waylandToggle.on('change', async function () {
@@ -251,25 +246,16 @@ $(document).ready(function () {
             const result = await api.invoke('service:setWaylandInputExperimental', { enabled });
             $waylandToggle.prop('checked', Boolean(result.enabled));
             $waylandStatus.text(result.message || 'Estado actualizado.');
-            await Swal.fire({
-                icon: result.enabled ? 'success' : 'info',
-                title: result.enabled ? 'Modo Wayland activado' : 'Modo Wayland desactivado',
-                text: result.message || 'Configuración actualizada.'
-            });
         } catch (error) {
             $waylandToggle.prop('checked', !enabled);
-            await Swal.fire({
-                icon: 'error',
-                title: 'No se pudo actualizar',
-                text: error.message || 'Error al actualizar el modo Wayland experimental.'
-            });
+            Swal.fire({ icon: 'error', title: 'No se pudo actualizar', text: error.message || 'Error al actualizar Wayland.' });
         } finally {
             $waylandToggle.prop('disabled', false);
         }
     });
 
     $('#show-input-commands').on('click', async () => {
-        const formatted = latestCommands.length ? latestCommands.join('\n') : 'No hay comandos sugeridos para este sistema.';
+        const formatted = latestCommands.length ? latestCommands.join('\n') : 'No hay comandos sugeridos.';
         await Swal.fire({
             title: 'Comandos sugeridos',
             html: `<pre style="text-align:left;white-space:pre-wrap;font-size:12px;background:#111827;color:#e5ecff;padding:12px;border-radius:8px;max-height:260px;overflow:auto;">${formatted}</pre>`,
@@ -280,19 +266,9 @@ $(document).ready(function () {
     $applyFix.on('click', async () => {
         try {
             $applyFix.prop('disabled', true);
-            const sessionType = String(($diagMessage.data('sessionType') || '')).toLowerCase();
-            if (sessionType === 'wayland') {
-                await Swal.fire({
-                    icon: 'info',
-                    title: 'Sesión Wayland detectada',
-                    text: 'Los comandos de grupos y /dev/uinput ya están correctos, pero Wayland puede seguir pidiendo privilegios por política del compositor. Para evitarlo, usa sesión X11.'
-                });
-                return;
-            }
             const result = await api.invoke('service:applyInputPermissionFix');
             await Swal.fire({ icon: 'success', title: 'Configuración aplicada', text: result.message });
             renderChecks(result?.diagnosis?.checks || []);
-            $diagMessage.text(result?.diagnosis?.message || 'Diagnóstico actualizado');
         } catch (error) {
             await Swal.fire({ icon: 'error', title: 'No se pudo aplicar', text: error.message || 'Error aplicando configuración' });
         } finally {
@@ -303,49 +279,12 @@ $(document).ready(function () {
     api.on('reproducirSonido', () => {
         const audioElement = document.getElementById('audio');
         if (audioElement) {
-            audioElement.play().catch(() => { /* Ignorar bloqueo de autoplay */ });
+            audioElement.play().catch(() => { });
         }
     });
 
-    api.invoke('window:getState').then(setWindowState).catch(() => {
-        setWindowState({ isMaximized: false });
-    });
-
-    api.on('windowStateChanged', (event, state) => {
-        setWindowState(state);
-    });
-
-    migrateNativeTitles();
-
-    $(document).on('mouseenter', '[data-tooltip]', function (event) {
-        showTooltip(this, event.originalEvent || event);
-    });
-
-    $(document).on('mousemove', '[data-tooltip]', function (event) {
-        if (tooltipTarget === this) {
-            positionTooltip(event.originalEvent || event);
-        }
-    });
-
-    $(document).on('mouseleave', '[data-tooltip]', function () {
-        if (tooltipTarget === this) {
-            hideTooltip();
-        }
-    });
-
-    $(document).on('focusin', '[data-tooltip]', function () {
-        showTooltip(this);
-    });
-
-    $(document).on('focusout', '[data-tooltip]', function () {
-        if (tooltipTarget === this) {
-            hideTooltip();
-        }
-    });
-
-    $(window).on('resize scroll', () => {
-        positionTooltip();
-    });
+    api.invoke('window:getState').then(setWindowState).catch(() => setWindowState({ isMaximized: false }));
+    api.on('windowStateChanged', (_event, state) => setWindowState(state));
 
     refreshServiceState();
 });
