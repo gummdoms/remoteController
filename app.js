@@ -1,18 +1,10 @@
 const { app, BrowserWindow, ipcMain, Tray, Menu, dialog, shell } = require('electron');
 const express = require('express');
-const https = require('https');
 const os = require('os');
-const { X509Certificate } = require('crypto');
 const path = require('path');
 const { exec, execFile, execSync, execFileSync } = require('child_process');
 const asyncQueue = require('async'); // Para manejar la cola de tareas
 const fs = require('fs');
-let QRCode = null;
-try {
-    QRCode = require('qrcode');
-} catch (error) {
-    console.warn('⚠️ qrcode no está disponible. El endpoint de QR devolverá solo URL de descarga.');
-}
 let robot = null;
 try {
     robot = require('robotjs');
@@ -27,6 +19,10 @@ const SettingsStore = require('./classes/Settings.js');
 const displayControl = require('./platform/displayControl');
 const audioControl = require('./platform/audioControl');
 const displayMode = require('./platform/displayMode');
+const cloudAgent = require('./desktop/cloud-agent');
+const deviceStore = require('./desktop/device-store');
+const sessionManager = require('./desktop/session-manager');
+const { PRODUCTION_CLOUD_URL } = require('./desktop/constants');
 
 const isWindows = process.platform === 'win32';
 const isLinux = process.platform === 'linux';
@@ -593,6 +589,21 @@ if (hasSingleInstanceLock) {
         if (!tray) {
             createTray();
         }
+        startInternalApiServer();
+        cloudAgent.onCloudStatus((status) => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('cloud:statusChanged', status);
+            }
+        });
+        sessionManager.restoreSession()
+            .then(() => {
+                if (mainWindow && !mainWindow.isDestroyed()) {
+                    mainWindow.webContents.send('auth:stateChanged', sessionManager.getAuthState());
+                }
+            })
+            .catch((error) => {
+                console.error('No se pudo restaurar la sesión:', error.message);
+            });
     });
 
     app.on('activate', () => {
@@ -611,6 +622,14 @@ app.on('window-all-closed', () => {
 });
 app.on('before-quit', () => {
     app.quitting = true;
+    cloudAgent.stopCloudAgent();
+    if (httpServer) {
+        try {
+            httpServer.close();
+        } catch (error) {
+            // Ignorar.
+        }
+    }
 });
 
 ipcMain.on('closeApp', () => {
@@ -640,68 +659,12 @@ ipcMain.handle('window:getState', () => {
 });
 const server = express();
 const REQUEST_BODY_LIMIT = '10mb';
-const HTTP_PORT = Number(process.env.HTTP_PORT || 4800);
-const HTTPS_PORT = Number(process.env.HTTPS_PORT || 5443);
-const defaultCertsDir = app.isPackaged ? path.join(userDataPath, 'certs') : path.join(__dirname, 'certs');
-const CERTS_DIR = process.env.CERTS_DIR || defaultCertsDir;
-const HTTPS_KEY_PATH = process.env.HTTPS_KEY_PATH || path.join(CERTS_DIR, 'server.key');
-const HTTPS_CERT_PATH = process.env.HTTPS_CERT_PATH || path.join(CERTS_DIR, 'server.crt');
-const ROOT_CA_PUBLIC_PATH = path.join(CERTS_DIR, 'rootCA.crt');
-let mkcertExecutablePath = null;
+const INTERNAL_API_HOST = process.env.INTERNAL_API_HOST || '127.0.0.1';
+const INTERNAL_API_PORT = Number(process.env.INTERNAL_API_PORT || process.env.HTTP_PORT || 4800);
 let httpServer = null;
-let httpsServer = null;
-let certificateRuntimeState = {
-    ok: false,
-    ip: null,
-    message: 'Certificado no inicializado'
-};
 
-function getPrimaryLocalIPv4() {
-    const interfaces = os.networkInterfaces();
-    const preferred = [];
-    const fallback = [];
-
-    for (const [name, addresses] of Object.entries(interfaces)) {
-        if (!Array.isArray(addresses)) {
-            continue;
-        }
-
-        for (const entry of addresses) {
-            if (!entry || entry.family !== 'IPv4' || entry.internal) {
-                continue;
-            }
-
-            if (entry.address.startsWith('169.254.')) {
-                continue;
-            }
-
-            const target = {
-                name: name.toLowerCase(),
-                address: entry.address
-            };
-
-            if (/ethernet|wi-?fi|wlan|en\d+|eth\d+/.test(target.name)) {
-                preferred.push(target.address);
-            } else {
-                fallback.push(target.address);
-            }
-        }
-    }
-
-    return preferred[0] || fallback[0] || null;
-}
-
-function getServiceHost() {
-    return certificateRuntimeState.ip || getPrimaryLocalIPv4() || 'localhost';
-}
-
-function getServiceUrls() {
-    const host = getServiceHost();
-    return {
-        host,
-        http: `http://${host}:${HTTP_PORT}/`,
-        https: `https://${host}:${HTTPS_PORT}/`
-    };
+function getCloudWebUrl() {
+    return deviceStore.getCloudConfig().serverUrl || PRODUCTION_CLOUD_URL;
 }
 
 function getAutostartState() {
@@ -985,8 +948,11 @@ async function applyLinuxInputPermissionFix() {
 }
 
 ipcMain.handle('service:getStatus', () => {
+    const cloud = cloudAgent.getCloudStatus();
     return {
-        urls: getServiceUrls(),
+        auth: sessionManager.getAuthState(),
+        cloud,
+        webUrl: getCloudWebUrl(),
         autostart: getAutostartState(),
         platform: process.platform,
         sessionType: process.env.XDG_SESSION_TYPE || null,
@@ -1003,12 +969,38 @@ ipcMain.handle('service:setAutostart', (event, payload) => {
     return setAutostartState(Boolean(payload?.enabled));
 });
 
-ipcMain.handle('service:openUrl', async (event, payload) => {
-    const mode = payload?.mode === 'https' ? 'https' : 'http';
-    const urls = getServiceUrls();
-    const targetUrl = mode === 'https' ? urls.https : urls.http;
+ipcMain.handle('service:openUrl', async () => {
+    const targetUrl = getCloudWebUrl();
     await shell.openExternal(targetUrl);
     return { ok: true, url: targetUrl };
+});
+
+ipcMain.handle('auth:login', async (_event, payload) => {
+    const result = await sessionManager.login(payload || {});
+    return result;
+});
+
+ipcMain.handle('auth:register', async (_event, payload) => {
+    const result = await sessionManager.register(payload || {});
+    return result;
+});
+
+ipcMain.handle('auth:logout', async () => {
+    await sessionManager.logout();
+    return sessionManager.getAuthState();
+});
+
+ipcMain.handle('auth:getState', () => {
+    return sessionManager.getAuthState();
+});
+
+ipcMain.handle('auth:renameDevice', async (_event, payload) => {
+    const device = await sessionManager.renameDevice(payload?.name);
+    return { device, auth: sessionManager.getAuthState() };
+});
+
+ipcMain.handle('cloud:getStatus', () => {
+    return cloudAgent.getCloudStatus();
 });
 
 ipcMain.handle('service:diagnoseInputPermission', () => {
@@ -1042,206 +1034,17 @@ ipcMain.handle('service:setWaylandInputExperimental', async (event, payload) => 
     };
 });
 
-function findMkcertExecutable() {
-    if (mkcertExecutablePath && fs.existsSync(mkcertExecutablePath)) {
-        return mkcertExecutablePath;
-    }
-
-    if (process.env.MKCERT_PATH && fs.existsSync(process.env.MKCERT_PATH)) {
-        mkcertExecutablePath = process.env.MKCERT_PATH;
-        return mkcertExecutablePath;
-    }
-
-    try {
-        if (isWindows) {
-            const found = execSync('where mkcert', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
-                .split(/\r?\n/)
-                .map((value) => value.trim())
-                .find(Boolean);
-            if (found && fs.existsSync(found)) {
-                mkcertExecutablePath = found;
-                return mkcertExecutablePath;
-            }
-        } else {
-            const found = execSync('command -v mkcert', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
-            if (found && fs.existsSync(found)) {
-                mkcertExecutablePath = found;
-                return mkcertExecutablePath;
-            }
-        }
-    } catch (error) {
-        // Ignorar: probaremos rutas alternativas.
-    }
-
-    if (isWindows) {
-        const wingetPackagesDir = path.join(process.env.LOCALAPPDATA || '', 'Microsoft', 'WinGet', 'Packages');
-        if (fs.existsSync(wingetPackagesDir)) {
-            try {
-                const packages = fs.readdirSync(wingetPackagesDir).filter((item) => item.toLowerCase().includes('mkcert'));
-                for (const pkg of packages) {
-                    const candidate = path.join(wingetPackagesDir, pkg, 'mkcert.exe');
-                    if (fs.existsSync(candidate)) {
-                        mkcertExecutablePath = candidate;
-                        return mkcertExecutablePath;
-                    }
-                }
-            } catch (error) {
-                // Ignorar
-            }
-        }
-    }
-
-    return null;
-}
-
-function runMkcert(args) {
-    const executable = findMkcertExecutable();
-    if (!executable) {
-        throw new Error('mkcert no está instalado en el sistema.');
-    }
-    return execFileSync(executable, args, { encoding: 'utf8' });
-}
-
-function certificateSupportsIp(ipAddress) {
-    if (!ipAddress || !fs.existsSync(HTTPS_CERT_PATH)) {
-        return false;
-    }
-
-    try {
-        const cert = new X509Certificate(fs.readFileSync(HTTPS_CERT_PATH));
-        const san = cert.subjectAltName || '';
-        return san.includes(`IP Address:${ipAddress}`);
-    } catch (error) {
-        return false;
-    }
-}
-
-function syncRootCaForClients() {
-    const caroot = runMkcert(['-CAROOT']).trim();
-    const rootCaPemPath = path.join(caroot, 'rootCA.pem');
-    if (!fs.existsSync(rootCaPemPath)) {
-        throw new Error('No se encontró rootCA.pem en el directorio de mkcert.');
-    }
-    fs.copyFileSync(rootCaPemPath, ROOT_CA_PUBLIC_PATH);
-}
-
-function ensureRootCaFileAvailable() {
-    if (fs.existsSync(ROOT_CA_PUBLIC_PATH)) {
-        return { ok: true, message: 'rootCA.crt disponible' };
-    }
-
-    try {
-        ensureDirectory(CERTS_DIR);
-        syncRootCaForClients();
-        if (fs.existsSync(ROOT_CA_PUBLIC_PATH)) {
-            return { ok: true, message: 'rootCA.crt sincronizado' };
-        }
-    } catch (error) {
-        // Intentar regeneración completa como fallback.
-    }
-
-    const regenResult = ensureLocalHttpsCertificate(false);
-    certificateRuntimeState = regenResult;
-
-    if (fs.existsSync(ROOT_CA_PUBLIC_PATH)) {
-        return { ok: true, message: 'rootCA.crt regenerado' };
-    }
-
-    return {
-        ok: false,
-        message: regenResult?.message || 'No se pudo preparar rootCA.crt'
-    };
-}
-
-function ensureLocalHttpsCertificate(force = false) {
-    ensureDirectory(CERTS_DIR);
-
-    const ipAddress = getPrimaryLocalIPv4();
-    if (!ipAddress) {
-        return {
-            ok: false,
-            ip: null,
-            message: 'No se detectó una IP IPv4 local válida para generar certificado.'
-        };
-    }
-
-    const requiresNewCertificate = force
-        || !fs.existsSync(HTTPS_KEY_PATH)
-        || !fs.existsSync(HTTPS_CERT_PATH)
-        || !certificateSupportsIp(ipAddress)
-        || !fs.existsSync(ROOT_CA_PUBLIC_PATH);
-
-    if (!requiresNewCertificate) {
-        return {
-            ok: true,
-            ip: ipAddress,
-            message: 'Certificado vigente para la IP actual.'
-        };
-    }
-
-    try {
-        runMkcert(['-install']);
-        runMkcert(['-key-file', HTTPS_KEY_PATH, '-cert-file', HTTPS_CERT_PATH, 'localhost', '127.0.0.1', '::1', ipAddress]);
-        syncRootCaForClients();
-
-        return {
-            ok: true,
-            ip: ipAddress,
-            message: `Certificado generado para ${ipAddress}`
-        };
-    } catch (error) {
-        return {
-            ok: false,
-            ip: ipAddress,
-            message: `No se pudo generar certificado automáticamente: ${error.message}`
-        };
-    }
-}
-
-function loadHttpsCredentials() {
-    if (!fs.existsSync(HTTPS_KEY_PATH) || !fs.existsSync(HTTPS_CERT_PATH)) {
-        return null;
-    }
-
-    try {
-        return {
-            key: fs.readFileSync(HTTPS_KEY_PATH),
-            cert: fs.readFileSync(HTTPS_CERT_PATH)
-        };
-    } catch (error) {
-        console.error('No se pudieron cargar los certificados HTTPS:', error.message);
-        return null;
-    }
-}
-
-function startApiServers() {
-    if (!httpServer) {
-        httpServer = server.listen(HTTP_PORT, () => {
-            console.log(`Servidor HTTP en el puerto ${HTTP_PORT}`);
-        });
-    }
-
-    if (httpsServer) {
-        try {
-            httpsServer.close();
-        } catch (error) {
-            console.error('No se pudo cerrar el servidor HTTPS previo:', error.message);
-        }
-        httpsServer = null;
-    }
-
-    const credentials = loadHttpsCredentials();
-    if (!credentials) {
-        console.warn('HTTPS deshabilitado: faltan certificados en certs/server.key y certs/server.crt');
+function startInternalApiServer() {
+    if (httpServer) {
         return;
     }
 
-    httpsServer = https.createServer(credentials, server).listen(HTTPS_PORT, () => {
-        console.log(`Servidor HTTPS en el puerto ${HTTPS_PORT}`);
+    httpServer = server.listen(INTERNAL_API_PORT, INTERNAL_API_HOST, () => {
+        console.log(`API interna en http://${INTERNAL_API_HOST}:${INTERNAL_API_PORT}`);
     });
 }
 
-server.use(cors()); // Usa cors para habilitar CORS en todas las rutas
+server.use(cors());
 server.use(express.urlencoded({ extended: true, limit: REQUEST_BODY_LIMIT }));
 server.use(express.json({ limit: REQUEST_BODY_LIMIT }));
 server.use((err, req, res, next) => {
@@ -1253,99 +1056,7 @@ server.use((err, req, res, next) => {
     }
     next(err);
 });
-if (hasSingleInstanceLock) {
-    certificateRuntimeState = ensureLocalHttpsCertificate(false);
-    if (!certificateRuntimeState.ok) {
-        console.warn(certificateRuntimeState.message);
-    }
-    startApiServers();
-}
-//pagina de inicio *//los htmls se encuentran en la carpeta views
-server.use(express.static(path.join(__dirname, 'views')));
-server.use('/node_modules', express.static(path.join(__dirname, 'node_modules')));
-server.use('/static', express.static(path.join(__dirname, 'static')));
-//usar tambien ../dashboard/img/icons/ para los iconos de las carpetas y archivos pero no esta en la raiz del proyecto esta otro nivel atras
 server.use('/dashboard/img/icons', express.static(path.join(__dirname, '../dashboard/img/icons')));
-server.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'views', 'index.html'));
-});
-
-server.get('/cert/rootca', (req, res) => {
-    const rootCaState = ensureRootCaFileAvailable();
-    if (!rootCaState.ok || !fs.existsSync(ROOT_CA_PUBLIC_PATH)) {
-        return res.status(404).send({
-            error: 'No existe rootCA.crt. Regenera el certificado.',
-            details: rootCaState.message
-        });
-    }
-
-    try {
-        let payload = null;
-        try {
-            payload = fs.readFileSync(ROOT_CA_PUBLIC_PATH);
-        } catch (firstError) {
-            // Reintento: regenerar/sincronizar y volver a leer.
-            const retryState = ensureRootCaFileAvailable();
-            if (!retryState.ok || !fs.existsSync(ROOT_CA_PUBLIC_PATH)) {
-                throw firstError;
-            }
-            payload = fs.readFileSync(ROOT_CA_PUBLIC_PATH);
-        }
-
-        res.setHeader('Content-Type', 'application/x-pem-file');
-        res.setHeader('Content-Disposition', 'attachment; filename="rootCA.crt"');
-        return res.send(payload);
-    } catch (error) {
-        console.error('Error al descargar rootCA.crt:', error.message);
-        return res.status(500).send({ error: 'No se pudo descargar rootCA.crt', details: error.message });
-    }
-});
-
-server.get('/cert/info', async (req, res) => {
-    const ipAddress = certificateRuntimeState.ip || getPrimaryLocalIPv4();
-    const host = ipAddress || 'localhost';
-    const rootCaDownloadUrl = `http://${host}:${HTTP_PORT}/cert/rootca`;
-    const httpsUrl = `https://${host}:${HTTPS_PORT}`;
-    const rootCaState = ensureRootCaFileAvailable();
-    let qrDataUrl = null;
-
-    if (QRCode) {
-        try {
-            qrDataUrl = await QRCode.toDataURL(rootCaDownloadUrl, {
-                width: 280,
-                margin: 1
-            });
-        } catch (error) {
-            qrDataUrl = null;
-        }
-    }
-
-    return res.send({
-        ok: certificateRuntimeState.ok,
-        message: certificateRuntimeState.message,
-        ip: host,
-        httpPort: HTTP_PORT,
-        httpsPort: HTTPS_PORT,
-        httpsUrl,
-        rootCaDownloadUrl,
-        qrDataUrl,
-        certExists: fs.existsSync(HTTPS_CERT_PATH) && fs.existsSync(HTTPS_KEY_PATH),
-        rootCaExists: fs.existsSync(ROOT_CA_PUBLIC_PATH),
-        rootCaMessage: rootCaState.message
-    });
-});
-
-server.post('/cert/regenerate', (req, res) => {
-    const result = ensureLocalHttpsCertificate(true);
-    certificateRuntimeState = result;
-
-    if (!result.ok) {
-        return res.status(500).send(result);
-    }
-
-    startApiServers();
-    return res.send(result);
-});
 
 server.get('/brillo', async (req, res) => {
     if (!ensureDisplayControlAvailable(res)) {
@@ -2186,6 +1897,68 @@ server.post('/transferirArchivo', upload.single('archivo'), (req, res) => {
     } catch (error) {
         console.error('Error al transferir el archivo:', error);
         res.status(500).send({
+            error: 'Error al transferir el archivo',
+            details: error.message
+        });
+    }
+});
+
+server.post('/transferirArchivoBase64', express.json({ limit: '15mb' }), (req, res) => {
+    const destino = typeof req.body?.path === 'string' ? req.body.path : '';
+    const filename = typeof req.body?.filename === 'string' ? path.basename(req.body.filename) : '';
+    const data = typeof req.body?.data === 'string' ? req.body.data : '';
+
+    if (!destino || !filename || !data) {
+        return res.status(400).send({ error: 'Ruta, nombre y datos del archivo son requeridos' });
+    }
+
+    try {
+        const buffer = Buffer.from(data, 'base64');
+        if (!buffer.length) {
+            return res.status(400).send({ error: 'El archivo está vacío' });
+        }
+
+        if (!fs.existsSync(destino)) {
+            fs.mkdirSync(destino, { recursive: true });
+        }
+
+        const destinoPath = path.join(destino, filename);
+        fs.writeFileSync(destinoPath, buffer);
+
+        return res.send({
+            status: 'ok',
+            message: 'Archivo transferido correctamente',
+            path: destinoPath
+        });
+    } catch (error) {
+        console.error('Error al transferir archivo base64:', error);
+        return res.status(500).send({
+            error: 'Error al transferir el archivo',
+            details: error.message
+        });
+    }
+});
+
+server.post('/transferirArchivoBase64', express.json({ limit: '15mb' }), (req, res) => {
+    const destino = typeof req.body?.path === 'string' ? req.body.path : '';
+    const filename = typeof req.body?.filename === 'string' ? path.basename(req.body.filename) : '';
+    const data = typeof req.body?.data === 'string' ? req.body.data : '';
+
+    if (!destino || !filename || !data) {
+        return res.status(400).send({ error: 'Ruta, nombre y datos del archivo son requeridos' });
+    }
+
+    try {
+        if (!fs.existsSync(destino)) {
+            fs.mkdirSync(destino, { recursive: true });
+        }
+
+        const destinoPath = path.join(destino, filename);
+        fs.writeFileSync(destinoPath, Buffer.from(data, 'base64'));
+        return res.send({ status: 'ok', message: 'Archivo transferido correctamente', path: destinoPath });
+    } catch (error) {
+        console.error('Error al transferir archivo base64:', error);
+        return res.status(500).send({
             error: 'Error al transferir el archivo',
             details: error.message
         });

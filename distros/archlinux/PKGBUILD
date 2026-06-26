@@ -1,0 +1,39 @@
+pkgname=remotecontrollers-bin
+pkgver=1.0.5
+pkgrel=1
+pkgdesc="Control remoto seguro de tu PC desde la web (BJR Software)"
+arch=('x86_64')
+url="https://remote-controller.bjrsoftware.uk/"
+license=('ISC')
+options=('!debug' '!strip')
+depends=(
+  'glibc'
+  'libx11'
+  'libxext'
+  'libxtst'
+  'libxrandr'
+  'gtk3'
+  'nss'
+  'alsa-lib'
+)
+optdepends=(
+  'pipewire: control de volumen con wpctl'
+  'ddcutil: brillo/contraste DDC/CI en monitores externos'
+  'kscreen: modos de pantalla en KDE Wayland'
+  'xorg-xrandr: modos de pantalla en X11'
+  'polkit: diálogos de permisos en Linux'
+)
+source=(
+  "remotecontrollers.AppImage"
+  "remotecontrollers.png"
+  "remotecontrollers.desktop"
+  "remotecontrollers.sh"
+)
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP')
+
+package() {
+  install -Dm755 "$srcdir/remotecontrollers.AppImage" "$pkgdir/opt/remotecontrollers/remotecontrollers.AppImage"
+  install -Dm755 "$srcdir/remotecontrollers.sh" "$pkgdir/usr/bin/remotecontrollers"
+  install -Dm644 "$srcdir/remotecontrollers.desktop" "$pkgdir/usr/share/applications/remotecontrollers.desktop"
+  install -Dm644 "$srcdir/remotecontrollers.png" "$pkgdir/usr/share/icons/hicolor/512x512/apps/remotecontrollers.png"
+}

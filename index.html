@@ -10,14 +10,13 @@
     <link rel="stylesheet" href="./node_modules/sweetalert2/dist/sweetalert2.css">
     <script src="./node_modules/jquery/dist/jquery.min.js"></script>
     <script src="./node_modules/sweetalert2/dist/sweetalert2.all.js"></script>
-    <title>Remote Service</title>
+    <title>Remote Controllers</title>
 </head>
 
 <body>
     <header class="header">
         <div class="brand">
             <img src="./assets/icon.png" alt="Remote Controller" class="brand__logo">
-            <!-- <span class="brand__name">Remote Controller</span> -->
         </div>
         <div class="container-buttons-win">
             <button class="minimize-window" data-tooltip="Minimizar">
@@ -28,57 +27,90 @@
             </button>
         </div>
     </header>
+
     <main class="main">
-        <!-- <div class="bg-shape bg-shape--orange"></div>
-        <div class="bg-shape bg-shape--blue"></div> -->
-        <div class="content service-dashboard">
+        <section id="auth-screen" class="auth-screen">
+            <div class="auth-screen__card">
+                <div class="auth-screen__brand">
+                    <img src="./assets/icon.png" alt="Remote Controllers">
+                    <div>
+                        <span class="eyebrow">Remote Controllers</span>
+                        <h1>Inicia sesión</h1>
+                    </div>
+                </div>
+                <p class="hint">Vincula este equipo a tu cuenta. Solo tú verás y controlarás tus dispositivos.</p>
+
+                <div class="auth-tabs">
+                    <button type="button" class="active" data-auth-mode="login">Iniciar sesión</button>
+                    <button type="button" data-auth-mode="register">Crear cuenta</button>
+                </div>
+
+                <form id="auth-form">
+                    <div class="field register-only" style="display:none;">
+                        <label for="auth-name">Tu nombre</label>
+                        <input type="text" id="auth-name" placeholder="Nombre" autocomplete="name">
+                    </div>
+                    <div class="field">
+                        <label for="auth-email">Email</label>
+                        <input type="email" id="auth-email" required placeholder="tu@email.com" autocomplete="username">
+                    </div>
+                    <div class="field">
+                        <label for="auth-password">Contraseña</label>
+                        <div class="password-field">
+                            <input type="password" id="auth-password" required minlength="8" placeholder="Mínimo 8 caracteres" autocomplete="current-password">
+                            <button type="button" class="password-toggle" id="toggle-password" aria-label="Mostrar contraseña">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="field">
+                        <label for="device-name">Nombre de este equipo</label>
+                        <input type="text" id="device-name" placeholder="PC oficina" autocomplete="off">
+                    </div>
+                    <button type="submit" class="btn-primary auth-submit" id="auth-submit">
+                        <span class="auth-submit__label">Entrar</span>
+                        <span class="auth-submit__spinner" aria-hidden="true"></span>
+                    </button>
+                </form>
+            </div>
+        </section>
+
+        <div id="dashboard-screen" class="content service-dashboard" style="display:none;">
             <section class="hero">
                 <p class="eyebrow">Remote Controller</p>
                 <div class="hero-meta-row">
                     <div class="hero__status" id="service-status-pill">
                         <span class="status-dot"></span>
-                        <span id="service-status-text">Cargando estado del servicio...</span>
+                        <span id="service-status-text">Cargando...</span>
                     </div>
-                    <button class="btn-danger exitApp hero-exit-btn">
-                        <i class="bi bi-power"></i>
-                        Salir
-                    </button>
+                    <div class="hero-actions">
+                        <button class="btn-ghost" id="logout-btn"><i class="bi bi-box-arrow-right"></i> Cerrar sesión</button>
+                        <button class="btn-danger exitApp hero-exit-btn">
+                            <i class="bi bi-power"></i>
+                            Salir
+                        </button>
+                    </div>
                 </div>
             </section>
 
             <section class="dashboard-grid">
                 <article class="panel-card">
                     <div class="panel-card__head">
-                        <h2>Acceso web</h2>
-                        <span class="panel-pill" id="service-host">host: --</span>
+                        <h2>Tu equipo</h2>
+                        <span class="panel-pill" id="cloud-status-pill">--</span>
                     </div>
-                    <div class="url-box">
-                        <label>HTTPS (segura)</label>
-                        <code id="https-url">https://--</code>
-                        <div class="url-box__actions">
-                            <p>
-                                Web Segura
-                            </p>
-                            <div class="actions">
-                                <button class="btn-primary" id="open-https-url"><i
-                                        class="bi bi-shield-lock"></i></button>
-                                <button class="btn-ghost" id="copy-https-url"><i class="bi bi-clipboard"></i></button>
-                            </div>
-
+                    <p class="hint" id="cloud-status-message">Conectando...</p>
+                    <p class="hint" id="user-info">--</p>
+                    <div class="field">
+                        <label for="rename-device">Nombre del equipo</label>
+                        <div class="rename-row">
+                            <input type="text" id="rename-device" class="cloud-input" placeholder="Nombre del equipo">
+                            <button class="btn-primary" id="save-device-name"><i class="bi bi-check-lg"></i></button>
                         </div>
                     </div>
-                    <div class="url-box">
-                        <label>HTTP (no segura)</label>
-                        <code id="http-url">http://--</code>
-                        <div class="url-box__actions">
-                            <p>
-                                Web No Segura
-                            </p>
-                            <div class="actions">
-                                <button class="btn-primary" id="open-http-url"><i class="bi bi-globe"></i></button>
-                                <button class="btn-ghost" id="copy-http-url"><i class="bi bi-clipboard"></i></button>
-
-                            </div>
+                    <div class="url-box__actions">
+                        <div class="actions">
+                            <button class="btn-ghost" id="open-web-url"><i class="bi bi-box-arrow-up-right"></i> Abrir panel web</button>
                         </div>
                     </div>
                 </article>
@@ -90,44 +122,40 @@
                     <label class="switch-row" for="autostart-toggle">
                         <div>
                             <strong>Ejecutar al iniciar el sistema</strong>
-                            <p>Compatible con Windows y Linux.</p>
+                            <p>Al iniciar Windows/Linux se reconectará automáticamente.</p>
                         </div>
                         <input type="checkbox" id="autostart-toggle">
                         <span class="switch-ui"></span>
                     </label>
                     <p class="hint" id="autostart-status">Cargando...</p>
                 </article>
-
-
             </section>
+
             <section class="permission">
                 <article class="panel-card panel-card--full">
                     <div class="panel-card__head">
                         <h2>Permisos de cursor (Linux)</h2>
-                        <button class="btn-ghost" id="refresh-input-diag"><i class="bi bi-arrow-repeat"></i>
-                            Actualizar</button>
+                        <button class="btn-ghost" id="refresh-input-diag"><i class="bi bi-arrow-repeat"></i> Actualizar</button>
                     </div>
                     <p class="hint" id="input-diag-message">Analizando configuración...</p>
                     <label class="switch-row" id="wayland-experimental-row" style="display:none; margin-top: 6px;">
                         <div>
                             <strong>Modo Wayland experimental</strong>
-                            <p>Permite mover cursor y teclear en Wayland, pero el compositor puede pedir confirmación
-                                repetida.</p>
+                            <p>Permite mover cursor y teclear en Wayland.</p>
                         </div>
                         <input type="checkbox" id="wayland-experimental-toggle">
                         <span class="switch-ui"></span>
                     </label>
-                    <p class="hint" id="wayland-experimental-status" style="display:none;">Cargando modo Wayland...</p>
+                    <p class="hint" id="wayland-experimental-status" style="display:none;"></p>
                     <ul class="diag-list" id="input-diag-list"></ul>
                     <div class="panel-actions" id="input-actions">
-                        <button class="btn-primary" id="apply-input-fix"><i class="bi bi-wrench"></i> Aplicar
-                            configuración automática</button>
-                        <button class="btn-ghost" id="show-input-commands"><i class="bi bi-terminal"></i> Ver comandos
-                            manuales</button>
+                        <button class="btn-primary" id="apply-input-fix"><i class="bi bi-wrench"></i> Aplicar configuración automática</button>
+                        <button class="btn-ghost" id="show-input-commands"><i class="bi bi-terminal"></i> Ver comandos manuales</button>
                     </div>
                 </article>
             </section>
         </div>
+
         <div class="container-mp3">
             <audio src="./static/audio/volumen.mp3" id="audio" controls></audio>
         </div>

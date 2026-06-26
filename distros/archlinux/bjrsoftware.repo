@@ -1,0 +1,3 @@
+[bjrsoftware]
+SigLevel = Optional TrustAll
+Server = https://realses.bjrsoftware.uk/arch/os/$arch
