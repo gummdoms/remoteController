@@ -377,6 +377,29 @@ Documentación adicional del servidor web: `../web/README.md`
 ---
 
 ## Licencia
-
 ISC — Copyright © 2024-2026 BJR Software  
 **Damar Narváez Martínez** — damar23nnm@gmail.com
+=======
+Si tienes preguntas o problemas, revisa `INSTALL.md` para una guía más detallada.
+
+<!-- AUTO-RELEASE-NOTES:START -->
+## Release Documentado Por Copilot
+
+- Rama: main
+- Commit: 74f6ea52ab9e7a38dde114c1fc87bc40f5e2bf50
+- Mensaje principal: Merge pull request #7 from gummdoms/DamarN/dev
+
+Actions Generar Assets separados
+- Fecha: 2026-05-18 18:56 UTC
+
+### Mejoras detectadas
+- Merge pull request #7 from gummdoms/DamarN/dev (74f6ea5)
+- Actions Generar Assets separados (f4f54f3)
+- docs: actualizar resumen automatico de release [skip ci] (001549f)
+- Merge pull request #6 from gummdoms/DamarN/dev (d0ae8f7)
+- Actions Generar Assets separados (44a5c52)
+
+### Artefactos
+- Windows: instalador NSIS (.exe)
+- Linux: AppImage
+- Arch Linux: .pkg.tar.zst
