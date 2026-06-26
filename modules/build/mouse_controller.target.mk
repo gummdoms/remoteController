@@ -41,13 +41,13 @@ CFLAGS_CC_Debug := \
 	-std=c++17
 
 INCS_Debug := \
-	-I/home/bjrzum/.cache/node-gyp/24.15.0/include/node \
-	-I/home/bjrzum/.cache/node-gyp/24.15.0/src \
-	-I/home/bjrzum/.cache/node-gyp/24.15.0/deps/openssl/config \
-	-I/home/bjrzum/.cache/node-gyp/24.15.0/deps/openssl/openssl/include \
-	-I/home/bjrzum/.cache/node-gyp/24.15.0/deps/uv/include \
-	-I/home/bjrzum/.cache/node-gyp/24.15.0/deps/zlib \
-	-I/home/bjrzum/.cache/node-gyp/24.15.0/deps/v8/include \
+	-I/tmp/cursor-sandbox-cache/955fe9cc738a031fa5f7e2a30944cf1c/node-gyp/24.15.0/include/node \
+	-I/tmp/cursor-sandbox-cache/955fe9cc738a031fa5f7e2a30944cf1c/node-gyp/24.15.0/src \
+	-I/tmp/cursor-sandbox-cache/955fe9cc738a031fa5f7e2a30944cf1c/node-gyp/24.15.0/deps/openssl/config \
+	-I/tmp/cursor-sandbox-cache/955fe9cc738a031fa5f7e2a30944cf1c/node-gyp/24.15.0/deps/openssl/openssl/include \
+	-I/tmp/cursor-sandbox-cache/955fe9cc738a031fa5f7e2a30944cf1c/node-gyp/24.15.0/deps/uv/include \
+	-I/tmp/cursor-sandbox-cache/955fe9cc738a031fa5f7e2a30944cf1c/node-gyp/24.15.0/deps/zlib \
+	-I/tmp/cursor-sandbox-cache/955fe9cc738a031fa5f7e2a30944cf1c/node-gyp/24.15.0/deps/v8/include \
 	-I$(srcdir)/node_modules/node-addon-api
 
 DEFS_Release := \
@@ -87,13 +87,13 @@ CFLAGS_CC_Release := \
 	-std=c++17
 
 INCS_Release := \
-	-I/home/bjrzum/.cache/node-gyp/24.15.0/include/node \
-	-I/home/bjrzum/.cache/node-gyp/24.15.0/src \
-	-I/home/bjrzum/.cache/node-gyp/24.15.0/deps/openssl/config \
-	-I/home/bjrzum/.cache/node-gyp/24.15.0/deps/openssl/openssl/include \
-	-I/home/bjrzum/.cache/node-gyp/24.15.0/deps/uv/include \
-	-I/home/bjrzum/.cache/node-gyp/24.15.0/deps/zlib \
-	-I/home/bjrzum/.cache/node-gyp/24.15.0/deps/v8/include \
+	-I/tmp/cursor-sandbox-cache/955fe9cc738a031fa5f7e2a30944cf1c/node-gyp/24.15.0/include/node \
+	-I/tmp/cursor-sandbox-cache/955fe9cc738a031fa5f7e2a30944cf1c/node-gyp/24.15.0/src \
+	-I/tmp/cursor-sandbox-cache/955fe9cc738a031fa5f7e2a30944cf1c/node-gyp/24.15.0/deps/openssl/config \
+	-I/tmp/cursor-sandbox-cache/955fe9cc738a031fa5f7e2a30944cf1c/node-gyp/24.15.0/deps/openssl/openssl/include \
+	-I/tmp/cursor-sandbox-cache/955fe9cc738a031fa5f7e2a30944cf1c/node-gyp/24.15.0/deps/uv/include \
+	-I/tmp/cursor-sandbox-cache/955fe9cc738a031fa5f7e2a30944cf1c/node-gyp/24.15.0/deps/zlib \
+	-I/tmp/cursor-sandbox-cache/955fe9cc738a031fa5f7e2a30944cf1c/node-gyp/24.15.0/deps/v8/include \
 	-I$(srcdir)/node_modules/node-addon-api
 
 OBJS := \

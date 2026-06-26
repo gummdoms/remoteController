@@ -13,7 +13,7 @@ permissions:
 jobs:
     build-windows-installer:
         if: github.event_name != 'push' || github.actor != 'github-actions[bot]'
-        runs-on: windows-latest
+        runs-on: windows-2022
 
         steps:
             - name: Checkout
@@ -23,6 +23,11 @@ jobs:
               uses: actions/setup-node@v4
               with:
                   node-version: 20
+
+            - name: Setup MSVC toolchain
+              uses: ilammy/msvc-dev-cmd@v1
+              with:
+                  arch: x64
 
             - name: Install dependencies
               shell: bash
@@ -130,7 +135,8 @@ jobs:
             - name: Install Arch dependencies
               run: |
                   pacman -Syu --noconfirm
-                  pacman -S --noconfirm nodejs npm base-devel python make gcc pkgconf libx11 libxtst libxext libxrandr
+                  pacman -S --noconfirm nodejs npm base-devel python make gcc pkgconf \
+                    libx11 libxtst libxext libxrandr gtk3 nss alsa-lib fuse2
 
             - name: Install dependencies
               run: |
@@ -176,8 +182,8 @@ jobs:
               with:
                   name: archlinux-package
                   path: |
-                      dist/arch-pkg/*.pkg.tar.zst
-                      DesktopApp/dist/arch-pkg/*.pkg.tar.zst
+                      dist/*.pkg.tar.zst
+                      DesktopApp/dist/*.pkg.tar.zst
 
     publish-auto-release-main:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.actor != 'github-actions[bot]'
