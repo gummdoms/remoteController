@@ -48,7 +48,7 @@
                 <form id="auth-form">
                     <div class="field register-only" style="display:none;">
                         <label for="auth-name">Tu nombre</label>
-                        <input type="text" id="auth-name" placeholder="Nombre">
+                        <input type="text" id="auth-name" placeholder="Nombre" autocomplete="name">
                     </div>
                     <div class="field">
                         <label for="auth-email">Email</label>
@@ -56,13 +56,21 @@
                     </div>
                     <div class="field">
                         <label for="auth-password">Contraseña</label>
-                        <input type="password" id="auth-password" required minlength="8" placeholder="Mínimo 8 caracteres" autocomplete="current-password">
+                        <div class="password-field">
+                            <input type="password" id="auth-password" required minlength="8" placeholder="Mínimo 8 caracteres" autocomplete="current-password">
+                            <button type="button" class="password-toggle" id="toggle-password" aria-label="Mostrar contraseña">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                        </div>
                     </div>
                     <div class="field">
                         <label for="device-name">Nombre de este equipo</label>
-                        <input type="text" id="device-name" placeholder="PC oficina">
+                        <input type="text" id="device-name" placeholder="PC oficina" autocomplete="off">
                     </div>
-                    <button type="submit" class="btn-primary" id="auth-submit">Entrar</button>
+                    <button type="submit" class="btn-primary auth-submit" id="auth-submit">
+                        <span class="auth-submit__label">Entrar</span>
+                        <span class="auth-submit__spinner" aria-hidden="true"></span>
+                    </button>
                 </form>
             </div>
         </section>

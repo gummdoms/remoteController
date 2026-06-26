@@ -1,385 +1,382 @@
-# 🖱️ Remote Controllers - Control de Mouse Táctil
-
-## 🎯 Características Principales
-
-### ✅ Implementado
-
-- 🖱️ **Touchpad Virtual** con movimiento relativo (como trackpad de portátil)
-- ⚡ **Módulo Nativo C++** para control del mouse (Windows API)
-- 📱 **Touch events** optimizados para móviles
-- 🖱️ **Mouse events** para testing en desktop
-- 🎚️ Control de brillo, contraste y volumen
-- 🖥️ Gestión de múltiples monitores
-- ⚙️ Control de energía (apagar, reiniciar, suspender)
-- ⌨️ Teclado virtual
-- 📦 Lanzador de aplicaciones personalizado
-
-## 🚀 Instalación Rápida
-
-### Requisitos
-
-1. **Python 3.x** - [Descargar](https://www.python.org/downloads/)
-2. **Visual Studio Build Tools 2019/2022** - [Descargar](https://visualstudio.microsoft.com/downloads/)
-3. **Node.js** - Ya instalado con Electron
-4. *(Linux)* **Herramientas del sistema**
-    - `ddcutil` + pertenecer a los grupos `i2c` y `video` para controlar brillo/contraste en monitores externos (DDC/CI).
-    - `brightnessctl` *(opcional)* para paneles internos sin DDC/CI.
-    - `xrandr` para sesiones X11 o `wlr-randr` para sesiones Wayland (Hyprland/Sway) a fin de cambiar modos de pantalla (`soloPc`, `duplicado`, etc.).
-    - En Wayland (KDE Plasma) instala `kscreen` (incluye `kscreen-doctor`). Si `XDG_SESSION_TYPE=wayland` y `XDG_CURRENT_DESKTOP` contiene `KDE`/`plasma`, la app usará automáticamente este backend para controlar los modos.
-
-### Instalación
-
-```powershell
-# Clonar/descargar el proyecto
-cd "d:\Documents\2. Proyectos\finish\EJS-remoteControllers\DesktopApp"
-
-# Instalar dependencias principales
-npm install
-
-# Compilar módulo nativo de mouse
-cd modules
-npm install
-cd ..
-
-# Compilar SASS (si haces cambios)
-npm install -g sass
-sass static/sass/index.view.scss static/css/index.view.css
-```
-
-### Arch Linux (KDE Plasma)
-
-```bash
-# Dependencias de compilación + runtime Linux/KDE
-sudo pacman -S --needed base-devel python make gcc pkgconf libx11 libxtst libxext \
-    xorg-xrandr kscreen ddcutil brightnessctl pipewire wireplumber
-
-# Permisos para ddcutil (reinicia sesión después de esto)
-sudo gpasswd -a "$USER" i2c
-sudo gpasswd -a "$USER" video
-
-# Instalar dependencias y compilar nativos para Electron
-npm install
-npm run build:native
-
-# Compilar estilos
-npm run build:sass
-
-# Ejecutar
-npm start
-```
-
-Empaquetado para Linux (estable):
-
-```bash
-npm run dist:linux
-```
-
-Empaquetado pacman (opcional para Arch):
-
-```bash
-sudo pacman -S --needed libxcrypt-compat
-npm run dist:linux:pacman
-```
-
-### Ejecutar
-
-```powershell
-npm start
-```
-
-## 📱 Uso desde el Móvil
-
-### 1. Conectar
-
-- Asegúrate de estar en la misma red WiFi que tu PC
-- Abre el navegador del móvil
-- Ve a: `http://[IP-DE-TU-PC]:4800` (modo HTTP)
-- Ejemplo: `http://192.168.1.100:4800`
-- Para micrófono/voz usa HTTPS local: `https://[IP-DE-TU-PC]:5443`
-- Si tienes certificados en `certs/server.key` y `certs/server.crt`, la app levanta HTTP+HTTPS automáticamente.
-
-### HTTPS local (recomendado para dictado por voz)
-
-1. Genera certificados locales (ejemplo con `mkcert`):
-
-```powershell
-mkcert -install
-mkcert -key-file certs/server.key -cert-file certs/server.crt localhost 127.0.0.1 ::1 192.168.1.100
-```
-
-1. Reemplaza `192.168.1.100` por la IP local real del PC.
-1. Reinicia la app con `npm start`.
-1. En el móvil abre `https://TU_IP:5443`.
-
-Notas:
-
-- Si no existen los certificados, solo se habilita HTTP.
-- Puedes cambiar rutas/puertos con `HTTPS_KEY_PATH`, `HTTPS_CERT_PATH`, `HTTP_PORT`, `HTTPS_PORT`.
-
-### 2. Touchpad Virtual
-
-#### Abrir el touchpad
-
-- Toca el botón del **cursor** (🖱️) en la esquina inferior derecha
-
-#### Controles
-
-- **Desliza** en el área gris → Mueve el cursor (movimiento relativo)
-- **Doble tap** → Doble click
-- **Botón L** → Click izquierdo
-- **Botón R** → Click derecho  
-- **Botón S** → Activa modo scroll (desliza arriba/abajo)
-
-#### Ajustar sensibilidad
-
-Abre la consola del navegador móvil (DevTools) y escribe:
-
-```javascript
-// Velocidad del cursor (default: 2.5)
-touchpadController.setSensitivity(3.0);
-
-// Velocidad del scroll (default: 1.0)
-touchpadController.setScrollSensitivity(1.5);
-```
-
-## 🎮 Características del Touchpad
-
-### Movimiento Relativo
-
-- ✅ Funciona como un **touchpad de portátil**
-- ✅ No se mueve a una posición absoluta
-- ✅ Se mueve **desde donde está** el cursor
-- ✅ Suave y preciso
-
-### Tecnología
-
-- **Módulo Nativo C++** usando Windows API (SendInput)
-- **Latencia < 5ms**
-- **60 FPS** de respuesta
-- **Throttling inteligente** para no saturar la red
-- **Fallback automático** a robotjs si el módulo nativo falla
-
-## 🛠️ Estructura del Proyecto
-
-```
-DesktopApp/
-├── modules/                      # Módulo nativo C++
-│   ├── mouse-controller.cc      # Código C++ del controlador
-│   ├── binding.gyp              # Configuración de compilación
-│   ├── package.json             # Dependencias del módulo
-│   └── index.js                 # Wrapper JavaScript
-│
-├── static/
-│   ├── js/
-│   │   ├── fx-mouse.js          # Lógica del touchpad
-│   │   ├── fx.js                # Funciones generales
-│   │   ├── index.js             # Lógica principal
-│   │   └── controller_app.js    # Control de apps
-│   │
-│   ├── sass/
-│   │   ├── _touchpad.scss       # Estilos del touchpad ⭐
-│   │   ├── _const.scss          # Variables
-│   │   └── index.view.scss      # Estilos principales
-│   │
-│   └── css/
-│       └── index.view.css       # CSS compilado
-│
-├── views/
-│   └── index.html               # Interfaz principal
-│
-├── app.js                       # Servidor Express + Electron
-├── package.json                 # Dependencias del proyecto
-├── INSTALL.md                   # Guía de instalación completa
-└── README.md                    # Este archivo
-```
-
-## 🔧 Desarrollo
-
-### Compilar SASS en tiempo real
-
-```powershell
-sass static/sass/index.view.scss static/css/index.view.css --watch
-```
-
-### Recompilar módulo nativo
-
-```powershell
-cd modules
-npm run rebuild
-```
-
-### Rebuild para Electron
-
-```powershell
-cd modules
-npm install electron-rebuild --save-dev
-npx electron-rebuild
-```
-
-## 📡 API REST
-
-### Endpoints del Mouse
-
-#### Mover (Relativo)
-
-```
-POST /mouse/move
-Body: { "dx": number, "dy": number }
-```
-
-#### Click
-
-```
-POST /mouse/click
-Body: { "button": "left" | "right" | "middle" }
-```
-
-#### Doble Click
-
-```
-POST /mouse/doubleclick
-```
-
-#### Scroll
-
-```
-POST /mouse/scroll
-Body: { "delta": number }
-```
-
-#### Obtener Posición
-
-```
-GET /mouse/position
-Response: { "position": { "x": number, "y": number } }
-```
-
-#### Mouse Down/Up
-
-```
-POST /mouse/down
-POST /mouse/up
-Body: { "button": "left" | "right" | "middle" }
-```
-
-### Otros Endpoints
-
-- `POST /brillo` - Ajustar brillo
-- `POST /contraste` - Ajustar contraste  
-- `POST /volumen` - Ajustar volumen
-- `GET /soloPc` - Solo pantalla principal
-- `GET /duplicado` - Duplicar pantallas
-- `GET /extender` - Extender pantallas
-- `GET /apagar` - Apagar PC
-- `GET /reiniciar` - Reiniciar PC
-- `GET /suspender` - Suspender PC
-
-## 🎨 Personalización
-
-### Cambiar colores del touchpad
-
-Edita `static/sass/_touchpad.scss`:
-
-```scss
-.container-touchpad {
-    background: linear-gradient(135deg, #TU_COLOR_1 0%, #TU_COLOR_2 100%);
-}
-```
-
-Luego compila:
-
-```powershell
-sass static/sass/index.view.scss static/css/index.view.css
-```
-
-### Ajustar tamaño del touchpad
-
-```scss
-.touchpad-area {
-    height: 350px; // Cambiar altura
-}
-```
-
-## 🐛 Solución de Problemas
-
-### El módulo nativo no carga
-
-✅ La app usará **robotjs** como fallback automáticamente
-✅ Funcionalidad al 90%, solo un poco más de latencia
-
-### Error al compilar el módulo
-
-```powershell
-cd modules
-npm run clean
-npm install
-```
-
-### El touchpad no responde
-
-1. Verifica que estés en la misma red
-2. Revisa la consola del navegador (F12)
-3. Prueba con el mouse en desktop para descartar problemas de red
-
-### El cursor va muy rápido/lento
-
-Ajusta la sensibilidad en la consola del navegador:
-
-```javascript
-touchpadController.setSensitivity(2.0); // Más lento
-touchpadController.setSensitivity(4.0); // Más rápido
-```
-
-## 📊 Comparación: Módulo Nativo vs RobotJS
-
-| Característica | Módulo Nativo C++ | RobotJS |
-|----------------|-------------------|---------|
-| Velocidad | ⚡ ~10x más rápido | 🐌 Lento |
-| Latencia | ✅ < 5ms | ⚠️ ~50ms |
-| Movimiento relativo | ✅ Nativo | ⚠️ Simulado |
-| Suavidad | ✅ Perfecta | ⚠️ Con saltos |
-| Precisión | ✅ Exacta | ✅ Buena |
-| Compilación | ⚠️ Requiere Build Tools | ✅ Pre-compilado |
-
-## 🎯 Ventajas del Movimiento Relativo
-
-### ¿Por qué movimiento relativo?
-
-- ✅ Funciona como un **touchpad real**
-- ✅ No necesitas tocar en la posición exacta
-- ✅ Más **intuitivo** y natural
-- ✅ Funciona en cualquier **resolución de pantalla**
-- ✅ No hay problemas de **calibración**
-
-### Vs. Movimiento Absoluto
-
-| Relativo (Touchpad) | Absoluto (Touch Screen) |
-|---------------------|-------------------------|
-| ✅ Natural e intuitivo | ❌ Requiere mapeo exacto |
-| ✅ Funciona en multi-monitor | ❌ Problemas con resoluciones |
-| ✅ Preciso | ⚠️ Puede descalibrarse |
-| ✅ No cansa el brazo | ❌ Necesitas estirar el brazo |
-
-## 🌟 Próximas Mejoras
-
-- [ ] Gestos multi-touch (pellizcar para zoom)
-- [ ] Modo "dibujo" de alta precisión
-- [ ] Perfiles de sensibilidad guardados
-- [ ] Soporte para trackpad físico Bluetooth
-- [ ] Módulos nativos para Linux y macOS
-- [ ] Arrastrar y soltar (drag & drop)
-- [ ] Click and hold automático
-
-## 📄 Licencia
-
-ISC - Copyright © 2024 BJRSOFTWARE
-
-## 👨‍💻 Autor
-
-**Damar Narváez Martínez**
+# Remote Controllers — Desktop App
+
+Agente de escritorio para control remoto vía cloud. El panel web/PWA vive en el servidor; esta app mantiene el PC en línea y ejecuta comandos locales.
+
+| Recurso | URL |
+|---------|-----|
+| Web / login | https://remote-controller.bjrsoftware.uk/ |
+| Repo pacman (releases) | https://realses.bjrsoftware.uk/arch/os/x86_64/ |
+| Contacto | damar23nnm@gmail.com |
 
 ---
 
-## 🎉 ¡Disfruta tu control remoto
+## Arquitectura
 
-Si tienes preguntas o problemas, revisa `INSTALL.md` para una guía más detallada.
+```text
+Móvil / navegador (PWA)
+    ↓ HTTPS + JWT
+Servidor cloud (web/)
+    ↓ WebSocket /api/proxy
+DesktopApp (este repo)
+    ↓ localhost:4800
+API local + módulo nativo (mouse, brillo, apps…)
+```
+
+- **Login en desktop:** vincula el equipo a tu cuenta cloud.
+- **Control remoto:** desde `/control` en la web, no por IP local.
+- **Sin pairing por código** en la versión actual: login directo en la app de escritorio.
+
+### Carpetas importantes
+
+```text
+DesktopApp/
+├── app.js                    # Electron + API local Express
+├── desktop/                  # Agente cloud (WebSocket, auth, device-store)
+├── distros/archlinux/        # PKGBUILD, scripts R2, repo pacman
+├── modules/                  # Control nativo del mouse (C++)
+├── static/                   # Assets del panel local (legacy)
+└── views/                    # UI servida por API local
+```
+
+---
+
+## Desarrollo local
+
+### Requisitos (Arch Linux)
+
+```bash
+sudo pacman -S --needed base-devel python make gcc pkgconf nodejs npm \
+    libx11 libxtst libxext xorg-xrandr kscreen ddcutil brightnessctl \
+    pipewire wireplumber electron
+```
+
+### Instalar y ejecutar
+
+```bash
+cd DesktopApp
+npm run setup          # install + nativos + sass
+npm start              # desarrollo (cloud URL por defecto en start:prod)
+npm run start:prod     # apunta a https://remote-controller.bjrsoftware.uk
+```
+
+### Scripts npm
+
+| Script | Descripción |
+|--------|-------------|
+| `npm run setup` | `npm install` + `build:native` + `build:sass` |
+| `npm start` | Electron en modo desarrollo |
+| `npm run start:prod` | Electron contra cloud de producción |
+| `npm run build:native` | Compila módulo C++ del mouse |
+| `npm run build:sass` | Compila estilos SCSS |
+| `npm run dist:linux` | Genera AppImage |
+| `npm run dist:arch:pkg` | Genera `.pkg.tar.zst` para Arch |
+| `npm run dist:arch:publish` | Genera índice pacman en `dist/r2-upload/` |
+| `npm run dist:arch:upload` | Sube a R2 vía Wrangler (token con permiso R2) |
+| `npm run dist:arch:release` | **Build + publish + rclone upload** (flujo completo) |
+
+---
+
+## Instalación en Arch Linux (usuarios finales)
+
+### 1. Añadir el repositorio
+
+Una sola vez:
+
+```bash
+sudo tee -a /etc/pacman.conf <<'EOF'
+
+[bjrsoftware]
+SigLevel = Optional TrustAll
+Server = https://realses.bjrsoftware.uk/arch/os/$arch
+EOF
+```
+
+O copia el bloque de `distros/archlinux/bjrsoftware.repo`.
+
+### 2. Instalar
+
+```bash
+sudo pacman -Sy
+# Debe aparecer la línea "bjrsoftware" al sincronizar
+sudo pacman -S remotecontrollers-bin
+```
+
+### 3. Ejecutar
+
+Desde el menú de aplicaciones **Remote Controllers**, o:
+
+```bash
+remotecontrollers
+```
+
+Inicia sesión con tu cuenta de https://remote-controller.bjrsoftware.uk/
+
+### 4. Actualizar
+
+```bash
+sudo pacman -Sy
+sudo pacman -S remotecontrollers-bin
+```
+
+### 5. Desinstalar
+
+```bash
+sudo pacman -R remotecontrollers-bin
+```
+
+### Dependencias opcionales (mejor experiencia en Linux)
+
+```bash
+sudo pacman -S --needed pipewire wireplumber ddcutil xorg-xrandr kscreen polkit
+sudo gpasswd -a "$USER" i2c video input uinput
+# Cierra sesión y vuelve a entrar para aplicar grupos
+```
+
+---
+
+## Publicar releases (mantenedor)
+
+Flujo para generar el paquete, el repo pacman y subirlo a **Cloudflare R2**.
+
+### Estructura en R2
+
+Bucket: `remote-controller`  
+Ruta: `arch/os/x86_64/`
+
+```text
+arch/os/x86_64/
+  remotecontrollers-bin-1.0.5-1-x86_64.pkg.tar.zst   # paquete (~127 MB)
+  bjrsoftware.db.tar.zst                              # índice comprimido
+  bjrsoftware.files.tar.zst
+  bjrsoftware.db                                      # copia (R2 no soporta symlinks)
+  bjrsoftware.files
+```
+
+URL pública del repo: https://realses.bjrsoftware.uk/arch/os/x86_64/
+
+---
+
+### Opción rápida: script de actualización completo
+
+Requiere **rclone** configurado (ver abajo):
+
+```bash
+cd DesktopApp
+npm run dist:arch:release
+```
+
+Esto ejecuta:
+
+1. `dist:arch:pkg` — compila AppImage + `.pkg.tar.zst`
+2. `dist:arch:publish` — genera `dist/r2-upload/` con los 5 archivos
+3. Borra el `.pkg` viejo en R2 y sube todo con rclone
+
+Si tu remote de rclone no se llama `cloudflaredr2`:
+
+```bash
+RCLONE_REMOTE=cloudflaredr2 npm run dist:arch:release
+```
+
+---
+
+### Paso a paso manual
+
+#### 1. Compilar el paquete
+
+```bash
+cd DesktopApp
+npm run setup              # solo la primera vez o tras cambios nativos
+npm run dist:arch:pkg
+```
+
+Salida: `dist/remotecontrollers-bin-{version}-1-x86_64.pkg.tar.zst`
+
+#### 2. Generar índice del repo
+
+```bash
+npm run dist:arch:publish
+```
+
+Salida: `dist/r2-upload/` con 5 archivos. El script imprime **size** y **sha256** del `.pkg`.
+
+#### 3. Subir a R2
+
+Elige una opción:
+
+**A) rclone (recomendado)**
+
+```bash
+# Si el .pkg ya existía, bórralo primero para forzar re-subida
+rclone delete cloudflaredr2:remote-controller/arch/os/x86_64/remotecontrollers-bin-1.0.5-1-x86_64.pkg.tar.zst
+
+rclone copy dist/r2-upload/ cloudflaredr2:remote-controller/arch/os/x86_64/ -v
+```
+
+Debe transferir ~**127 MiB** para el `.pkg`. Si solo transfiere ~2 KiB, el paquete no se actualizó — usa `rclone delete` antes.
+
+**B) Panel Cloudflare**
+
+1. [dash.cloudflare.com](https://dash.cloudflare.com) → **R2** → `remote-controller`
+2. Carpeta `arch/os/x86_64/`
+3. Sube los **5 archivos** de `dist/r2-upload/` sobrescribiendo los existentes
+
+**C) Wrangler**
+
+```bash
+npm run dist:arch:upload
+```
+
+Requiere `CF_ACCOUNT_ID` y `CF_API_TOKEN` con permiso **R2 Object Read & Write** en `web/.env`.
+
+#### 4. Verificar subida
+
+```bash
+# Tamaño local (lo imprime dist:arch:publish)
+stat -c%s dist/r2-upload/remotecontrollers-bin-*-x86_64.pkg.tar.zst
+
+# Tamaño en R2 directo
+rclone size cloudflaredr2:remote-controller/arch/os/x86_64/remotecontrollers-bin-1.0.5-1-x86_64.pkg.tar.zst
+
+# Tamaño en URL pública (lo que usa pacman)
+curl -sI https://realses.bjrsoftware.uk/arch/os/x86_64/remotecontrollers-bin-1.0.5-1-x86_64.pkg.tar.zst | grep -i content-length
+```
+
+Los tres deben coincidir (ej. `132812217`).
+
+#### 5. Purgar caché Cloudflare
+
+El dominio `realses.bjrsoftware.uk` cachea archivos. Tras cada release:
+
+1. Cloudflare → dominio → **Caching** → **Purge Cache**
+2. Purga estas URLs (o todo `realses.bjrsoftware.uk/arch/*`):
+
+```text
+https://realses.bjrsoftware.uk/arch/os/x86_64/remotecontrollers-bin-1.0.5-1-x86_64.pkg.tar.zst
+https://realses.bjrsoftware.uk/arch/os/x86_64/bjrsoftware.db
+https://realses.bjrsoftware.uk/arch/os/x86_64/bjrsoftware.db.tar.zst
+https://realses.bjrsoftware.uk/arch/os/x86_64/bjrsoftware.files
+https://realses.bjrsoftware.uk/arch/os/x86_64/bjrsoftware.files.tar.zst
+```
+
+**Regla permanente (recomendado):** Cache Rules → `realses.bjrsoftware.uk/arch/*` → **Bypass cache**.
+
+Verifica que ya no esté cacheado:
+
+```bash
+curl -sI https://realses.bjrsoftware.uk/arch/os/x86_64/remotecontrollers-bin-1.0.5-1-x86_64.pkg.tar.zst | grep -iE 'content-length|cf-cache'
+# content-length: 132812217
+# cf-cache-status: MISS  (no HIT)
+```
+
+---
+
+## Configurar rclone para Cloudflare R2
+
+```bash
+sudo pacman -S rclone
+rclone config
+```
+
+| Pregunta | Valor |
+|----------|-------|
+| Tipo de storage | `4` (s3) |
+| Provider | `Cloudflare` |
+| env_auth | `false` |
+| access_key_id | Access Key del token R2 |
+| secret_access_key | Secret del token R2 |
+| endpoint | `https://<CF_ACCOUNT_ID>.r2.cloudflarestorage.com` |
+| bucket_acl / object_lock | Enter (defaults) |
+| Nombre del remote | ej. `cloudflaredr2` |
+
+Crear token R2: Dashboard → **R2** → **Manage R2 API Tokens** → Object Read & Write en `remote-controller`.
+
+Probar:
+
+```bash
+rclone lsd cloudflaredr2:
+# Debe listar: remote-controller
+```
+
+---
+
+## Instalación local sin repo (prueba)
+
+```bash
+sudo pacman -U dist/remotecontrollers-bin-*-x86_64.pkg.tar.zst
+remotecontrollers
+```
+
+---
+
+## Solución de problemas
+
+### `pacman -Sy` no muestra `bjrsoftware`
+
+Falta el bloque `[bjrsoftware]` en `/etc/pacman.conf`. Ver [Añadir el repositorio](#1-añadir-el-repositorio).
+
+### `suma de verificación` / paquete dañado
+
+Causas habituales:
+
+1. **Índice y paquete desincronizados** — subiste `.db` nuevo pero dejaste `.pkg` viejo en R2.
+2. **Caché Cloudflare** — la URL pública sirve archivo viejo (`cf-cache-status: HIT`).
+
+```bash
+# Regenerar todo
+npm run dist:arch:publish
+
+# Forzar subida del paquete
+rclone delete cloudflaredr2:remote-controller/arch/os/x86_64/remotecontrollers-bin-1.0.5-1-x86_64.pkg.tar.zst
+rclone copy dist/r2-upload/ cloudflaredr2:remote-controller/arch/os/x86_64/ -v
+
+# Purgar caché Cloudflare (panel web)
+
+# Verificar tamaños coinciden, luego instalar
+sudo rm -f /var/cache/pacman/pkg/remotecontrollers-bin-1.0.5-1-x86_64.pkg.tar.zst
+sudo pacman -Sy
+sudo pacman -S remotecontrollers-bin
+```
+
+### rclone muy rápido (~2 KiB, no ~127 MiB)
+
+Rclone omitió el `.pkg` pensando que ya existía. Usa `rclone delete` del `.pkg` antes de `rclone copy`, o el script `npm run dist:arch:release`.
+
+### `zsh: no matches found` al borrar caché pacman
+
+```bash
+sudo rm -f /var/cache/pacman/pkg/remotecontrollers-bin-1.0.5-1-x86_64.pkg.tar.zst
+```
+
+### Equipo no aparece en la web
+
+- App desktop abierta y sesión iniciada.
+- Estado **En línea** en el dashboard de la app.
+- Misma cuenta en web y desktop.
+
+### Mouse / touchpad lento desde el móvil
+
+La latencia depende de la red hasta el servidor cloud. El relay usa fire-and-forget para movimientos. Configura sensibilidad en el panel **Configuración del mouse** (se guarda en D1 por equipo).
+
+---
+
+## Archivos en `distros/archlinux/`
+
+| Archivo | Función |
+|---------|---------|
+| `PKGBUILD` | Definición del paquete `remotecontrollers-bin` |
+| `build-package.sh` | AppImage → `.pkg.tar.zst` |
+| `publish-r2.sh` | `repo-add` + prepara `dist/r2-upload/` |
+| `upload-r2.sh` | Sube a R2 vía Wrangler |
+| `release.sh` | Build + publish + rclone (flujo completo) |
+| `bjrsoftware.repo` | Bloque para `/etc/pacman.conf` |
+| `remotecontrollers.desktop` | Entrada de menú |
+| `remotecontrollers.sh` | Launcher del AppImage empaquetado |
+
+Documentación adicional del servidor web: `../web/README.md`
+
+---
+
+## Licencia
+
+ISC — Copyright © 2024-2026 BJR Software  
+**Damar Narváez Martínez** — damar23nnm@gmail.com

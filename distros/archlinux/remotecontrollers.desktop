@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Remote Controllers
+Comment=Control remoto seguro de tu PC (BJR Software)
+Exec=remotecontrollers
+Icon=remotecontrollers
+Terminal=false
+Categories=Utility;Network;
+Keywords=remote;control;desktop;bjrsoftware;

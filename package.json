@@ -10,30 +10,38 @@
     "dist:win": "electron-builder --win nsis",
     "dist:linux": "electron-builder --linux AppImage",
     "dist:linux:pacman": "electron-builder --linux pacman",
-    "dist:arch:pkg": "bash scripts/build-arch-package.sh",
+    "dist:arch:pkg": "bash distros/archlinux/build-package.sh",
+    "dist:arch:publish": "bash distros/archlinux/publish-r2.sh",
+    "dist:arch:upload": "bash distros/archlinux/upload-r2.sh",
+    "dist:arch:release": "bash distros/archlinux/release.sh",
     "postinstall": "electron-builder install-app-deps",
     "build:native": "cd modules && npm install && cd .. && electron-builder install-app-deps",
     "rebuild:native": "cd modules && npm run rebuild",
     "rebuild:electron": "electron-builder install-app-deps",
     "build:sass": "sass static/sass/index.view.scss static/css/index.view.css",
-    "build:sass:web": "sass web/static/sass/index.view.scss web/static/css/index.view.css",
-    "web:install": "cd web && npm install",
-    "web:start": "cd web && npm start",
     "watch:sass": "sass static/sass/index.view.scss static/css/index.view.css --watch",
     "test:mouse": "node modules/examples.js",
     "setup": "npm install && npm run build:native && npm run build:sass"
   },
   "author": {
     "name": "Damar Narváez Martínez",
-    "email": "no-reply@remotecontrollers.local"
+    "email": "damar23nnm@gmail.com"
   },
-  "homepage": "https://remotecontrollers.local",
+  "homepage": "https://remote-controller.bjrsoftware.uk/",
+  "bugs": {
+    "url": "https://remote-controller.bjrsoftware.uk/",
+    "email": "damar23nnm@gmail.com"
+  },
   "license": "ISC",
-  "description": "Software para control remoto de pantalla",
+  "description": "Control remoto seguro de tu PC desde la web o el móvil (BJRSoftware)",
+  "config": {
+    "cloudUrl": "https://remote-controller.bjrsoftware.uk",
+    "releasesUrl": "https://realses.bjrsoftware.uk/arch/os/x86_64"
+  },
   "build": {
     "appId": "com.bjrsoftware.remotecontrollers",
     "productName": "Remote Controllers",
-    "copyright": "Copyright © 2024 BJRSOFTWARE",
+    "copyright": "Copyright © 2024-2026 BJR Software",
     "win": {
       "icon": "assets/icon.ico",
       "legalTrademarks": "BJRSOFTWARE",
@@ -44,7 +52,7 @@
     "linux": {
       "icon": "assets/icon.png",
       "category": "Utility",
-      "maintainer": "Damar Narváez Martínez <no-reply@remotecontrollers.local>",
+      "maintainer": "Damar Narváez Martínez <damar23nnm@gmail.com>",
       "target": [
         {
           "target": "AppImage",

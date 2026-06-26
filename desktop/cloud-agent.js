@@ -1,11 +1,8 @@
 const http = require('http');
 const WebSocket = require('ws');
-const os = require('os');
 const {
     getCloudConfig,
-    saveCloudCredentials,
     saveConnectionStatus,
-    clearDeviceCredentials
 } = require('./device-store');
 
 const INTERNAL_API_HOST = process.env.INTERNAL_API_HOST || '127.0.0.1';
@@ -48,6 +45,14 @@ function buildStatus(extra = {}) {
     };
 }
 
+function isTextContentType(contentType) {
+    const value = String(contentType || '').toLowerCase();
+    return value.includes('application/json')
+        || value.startsWith('text/')
+        || value.includes('application/javascript')
+        || value.includes('application/xml');
+}
+
 function dispatchLocalApi({ method, path: apiPath, body, query }) {
     return new Promise((resolve, reject) => {
         const queryString = new URLSearchParams(query || {}).toString();
@@ -67,21 +72,39 @@ function dispatchLocalApi({ method, path: apiPath, body, query }) {
             const chunks = [];
             res.on('data', (chunk) => chunks.push(chunk));
             res.on('end', () => {
-                const raw = Buffer.concat(chunks).toString('utf8');
-                let parsed = raw;
+                const buffer = Buffer.concat(chunks);
                 const contentType = String(res.headers['content-type'] || '');
-                if (contentType.includes('application/json')) {
-                    try {
-                        parsed = JSON.parse(raw);
-                    } catch (error) {
-                        parsed = raw;
-                    }
+                const headers = {
+                    'content-type': contentType
+                };
+
+                if (res.headers['content-disposition']) {
+                    headers['content-disposition'] = res.headers['content-disposition'];
                 }
+
+                if (isTextContentType(contentType)) {
+                    let parsed = buffer.toString('utf8');
+                    if (contentType.includes('application/json')) {
+                        try {
+                            parsed = JSON.parse(parsed);
+                        } catch (error) {
+                            // Mantener texto crudo.
+                        }
+                    }
+                    resolve({
+                        status: res.statusCode || 500,
+                        body: parsed,
+                        headers
+                    });
+                    return;
+                }
+
                 resolve({
                     status: res.statusCode || 500,
-                    body: parsed,
+                    body: buffer.toString('base64'),
                     headers: {
-                        'content-type': contentType
+                        ...headers,
+                        'x-body-encoding': 'base64'
                     }
                 });
             });
@@ -139,20 +162,34 @@ async function handleWsMessage(message) {
     }
 
     if (message.type === 'api') {
-        try {
+        const runRequest = async () => {
             const result = await dispatchLocalApi({
                 method: message.method,
                 path: message.path,
                 body: message.body,
                 query: message.query
             });
-            sendWs({
-                type: 'api_response',
-                requestId: message.requestId,
-                status: result.status,
-                body: result.body,
-                headers: result.headers
+
+            if (!message.fireAndForget) {
+                sendWs({
+                    type: 'api_response',
+                    requestId: message.requestId,
+                    status: result.status,
+                    body: result.body,
+                    headers: result.headers
+                });
+            }
+        };
+
+        if (message.fireAndForget) {
+            runRequest().catch((error) => {
+                console.error('Error en petición fire-and-forget:', error.message);
             });
+            return;
+        }
+
+        try {
+            await runRequest();
         } catch (error) {
             sendWs({
                 type: 'api_response',

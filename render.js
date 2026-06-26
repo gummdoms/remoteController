@@ -130,9 +130,20 @@ $(document).ready(function () {
         $('.auth-tabs button').removeClass('active');
         $(this).addClass('active');
         $('.register-only').toggle(authMode === 'register');
-        $('#auth-submit').text(authMode === 'register' ? 'Crear cuenta' : 'Entrar');
+        $('#auth-submit .auth-submit__label').text(authMode === 'register' ? 'Crear cuenta' : 'Entrar');
         $('.auth-screen__brand h1').text(authMode === 'register' ? 'Crear cuenta' : 'Inicia sesión');
     });
+
+    $('#toggle-password').on('click', function () {
+        const $input = $('#auth-password');
+        const isPassword = $input.attr('type') === 'password';
+        $input.attr('type', isPassword ? 'text' : 'password');
+        $(this).find('i').attr('class', isPassword ? 'bi bi-eye-slash' : 'bi bi-eye');
+    });
+
+    const setAuthLoading = (loading) => {
+        $('#auth-submit').prop('disabled', loading).toggleClass('is-loading', loading);
+    };
 
     $('#auth-form').on('submit', async function (event) {
         event.preventDefault();
@@ -143,7 +154,7 @@ $(document).ready(function () {
             deviceName: $('#device-name').val().trim()
         };
 
-        $('#auth-submit').prop('disabled', true);
+        setAuthLoading(true);
 
         try {
             if (authMode === 'register') {
@@ -155,7 +166,7 @@ $(document).ready(function () {
         } catch (error) {
             Swal.fire({ icon: 'error', title: 'Error', text: error.message || 'No se pudo completar la autenticación.' });
         } finally {
-            $('#auth-submit').prop('disabled', false);
+            setAuthLoading(false);
         }
     });
 

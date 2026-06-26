@@ -31,8 +31,9 @@ class TouchpadController {
         this.longPressDelay = 600;
         this.doubleTapThreshold = 300;
 
-        // Debounce para evitar enviar demasiadas peticiones
-        this.throttleDelay = 12; // ~80fps aproximados
+        // Debounce para no saturar el servidor (más rápido en modo cloud)
+        this.isCloudProxy = typeof URL_API !== 'undefined' && String(URL_API).includes('/api/proxy/');
+        this.throttleDelay = this.isCloudProxy ? 5 : 12;
         this.lastSendTime = 0;
 
         // Valores pendientes para acumular movimiento fraccional
@@ -412,9 +413,17 @@ class TouchpadController {
         fetch(`${URL_API}mouse/move`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ dx, dy })
+            body: JSON.stringify({ dx, dy }),
+            keepalive: true
         })
-            .then((response) => this.handleInputResponse(response))
+            .then((response) => {
+                if (!this.isCloudProxy) {
+                    return this.handleInputResponse(response);
+                }
+                if (!response.ok && response.status !== 202) {
+                    return this.handleInputResponse(response);
+                }
+            })
             .catch(err => console.error('Error moviendo mouse:', err));
     }
 
@@ -432,9 +441,17 @@ class TouchpadController {
         fetch(`${URL_API}mouse/scroll`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ delta })
+            body: JSON.stringify({ delta }),
+            keepalive: true
         })
-            .then((response) => this.handleInputResponse(response))
+            .then((response) => {
+                if (!this.isCloudProxy) {
+                    return this.handleInputResponse(response);
+                }
+                if (!response.ok && response.status !== 202) {
+                    return this.handleInputResponse(response);
+                }
+            })
             .catch(err => console.error('Error en scroll:', err));
     }
 

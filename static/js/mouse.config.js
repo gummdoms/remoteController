@@ -1,5 +1,7 @@
 (() => {
-    const API_ENDPOINT = '/mouse/config';
+    const getApiEndpoint = () => (
+        typeof URL_API !== 'undefined' ? `${URL_API}mouse/config` : '/mouse/config'
+    );
     const SAVE_DEBOUNCE_MS = 450;
     const POINTER_MIN = 0.5;
     const POINTER_MAX = 6;
@@ -146,7 +148,7 @@
 
         async loadConfig() {
             try {
-                const response = await fetch(API_ENDPOINT);
+                const response = await fetch(getApiEndpoint());
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}`);
                 }
@@ -174,7 +176,7 @@
 
         async persistConfig() {
             try {
-                const response = await fetch(API_ENDPOINT, {
+                const response = await fetch(getApiEndpoint(), {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'

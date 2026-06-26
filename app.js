@@ -1903,6 +1903,68 @@ server.post('/transferirArchivo', upload.single('archivo'), (req, res) => {
     }
 });
 
+server.post('/transferirArchivoBase64', express.json({ limit: '15mb' }), (req, res) => {
+    const destino = typeof req.body?.path === 'string' ? req.body.path : '';
+    const filename = typeof req.body?.filename === 'string' ? path.basename(req.body.filename) : '';
+    const data = typeof req.body?.data === 'string' ? req.body.data : '';
+
+    if (!destino || !filename || !data) {
+        return res.status(400).send({ error: 'Ruta, nombre y datos del archivo son requeridos' });
+    }
+
+    try {
+        const buffer = Buffer.from(data, 'base64');
+        if (!buffer.length) {
+            return res.status(400).send({ error: 'El archivo está vacío' });
+        }
+
+        if (!fs.existsSync(destino)) {
+            fs.mkdirSync(destino, { recursive: true });
+        }
+
+        const destinoPath = path.join(destino, filename);
+        fs.writeFileSync(destinoPath, buffer);
+
+        return res.send({
+            status: 'ok',
+            message: 'Archivo transferido correctamente',
+            path: destinoPath
+        });
+    } catch (error) {
+        console.error('Error al transferir archivo base64:', error);
+        return res.status(500).send({
+            error: 'Error al transferir el archivo',
+            details: error.message
+        });
+    }
+});
+
+server.post('/transferirArchivoBase64', express.json({ limit: '15mb' }), (req, res) => {
+    const destino = typeof req.body?.path === 'string' ? req.body.path : '';
+    const filename = typeof req.body?.filename === 'string' ? path.basename(req.body.filename) : '';
+    const data = typeof req.body?.data === 'string' ? req.body.data : '';
+
+    if (!destino || !filename || !data) {
+        return res.status(400).send({ error: 'Ruta, nombre y datos del archivo son requeridos' });
+    }
+
+    try {
+        if (!fs.existsSync(destino)) {
+            fs.mkdirSync(destino, { recursive: true });
+        }
+
+        const destinoPath = path.join(destino, filename);
+        fs.writeFileSync(destinoPath, Buffer.from(data, 'base64'));
+        return res.send({ status: 'ok', message: 'Archivo transferido correctamente', path: destinoPath });
+    } catch (error) {
+        console.error('Error al transferir archivo base64:', error);
+        return res.status(500).send({
+            error: 'Error al transferir el archivo',
+            details: error.message
+        });
+    }
+});
+
 
 
 // =============================================
