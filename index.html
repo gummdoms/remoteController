@@ -131,6 +131,29 @@
                 </article>
             </section>
 
+            <section class="permission" id="windows-input-section" style="display:none;">
+                <article class="panel-card panel-card--full">
+                    <div class="panel-card__head">
+                        <h2>Teclado avanzado (Windows)</h2>
+                        <button class="btn-ghost" id="refresh-interception-status"><i class="bi bi-arrow-repeat"></i> Actualizar</button>
+                    </div>
+                    <p class="hint">
+                        Para trainers o juegos que ignoran teclas simuladas. Instala el driver
+                        <a href="https://github.com/oblitum/Interception/releases/" id="interception-download-link" target="_blank" rel="noopener noreferrer">Interception</a>
+                        y actívalo aquí.
+                    </p>
+                    <label class="switch-row" id="interception-input-row">
+                        <div>
+                            <strong>Usar Interception para el teclado</strong>
+                            <p>El mouse sigue usando el método estándar.</p>
+                        </div>
+                        <input type="checkbox" id="interception-input-toggle">
+                        <span class="switch-ui"></span>
+                    </label>
+                    <p class="hint" id="interception-input-status">Cargando estado...</p>
+                </article>
+            </section>
+
             <section class="permission">
                 <article class="panel-card panel-card--full">
                     <div class="panel-card__head">

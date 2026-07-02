@@ -19,10 +19,11 @@ const SettingsStore = require('./classes/Settings.js');
 const displayControl = require('./platform/displayControl');
 const audioControl = require('./platform/audioControl');
 const displayMode = require('./platform/displayMode');
+const interceptionKeyboard = require('./platform/interception-keyboard');
 const cloudAgent = require('./desktop/cloud-agent');
 const deviceStore = require('./desktop/device-store');
 const sessionManager = require('./desktop/session-manager');
-const { PRODUCTION_CLOUD_URL } = require('./desktop/constants');
+const { PRODUCTION_CLOUD_URL, INTERCEPTION_RELEASES_URL } = require('./desktop/constants');
 
 const isWindows = process.platform === 'win32';
 const isLinux = process.platform === 'linux';
@@ -34,6 +35,7 @@ const waylandEnvValue = String(process.env.ALLOW_WAYLAND_INPUT || '').toLowerCas
 let allowWaylandInputExperimental = waylandEnvValue
     ? ['1', 'true', 'yes', 'on'].includes(waylandEnvValue)
     : true;
+let useInterceptionInput = false;
 
 const ALERT_THRESHOLD_MS = 5 * 60 * 1000;
 const hasRobotFallback = () => Boolean(robot);
@@ -477,6 +479,17 @@ settingsStore.getWaylandInputExperimental(allowWaylandInputExperimental)
         console.warn('No se pudo leer preferencia wayland_input_experimental:', error.message);
     });
 
+settingsStore.getInterceptionInputEnabled(false)
+    .then((enabled) => {
+        useInterceptionInput = Boolean(enabled);
+        if (useInterceptionInput && isWindows) {
+            interceptionKeyboard.probeDriver();
+        }
+    })
+    .catch((error) => {
+        console.warn('No se pudo leer preferencia interception_input_enabled:', error.message);
+    });
+
 const MOUSE_POINTER_MIN = 0.5;
 const MOUSE_POINTER_MAX = 6;
 const MOUSE_SCROLL_MIN = 0.5;
@@ -623,6 +636,7 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
     app.quitting = true;
     cloudAgent.stopCloudAgent();
+    interceptionKeyboard.destroy();
     if (httpServer) {
         try {
             httpServer.close();
@@ -960,7 +974,8 @@ ipcMain.handle('service:getStatus', () => {
         inputControl: {
             waylandExperimentalAvailable: isLinux && isWaylandSession,
             waylandExperimentalEnabled: Boolean(allowWaylandInputExperimental),
-            canInjectInput: !isWaylandSession || Boolean(allowWaylandInputExperimental)
+            canInjectInput: !isWaylandSession || Boolean(allowWaylandInputExperimental),
+            interception: getInterceptionInputState()
         }
     };
 });
@@ -1032,6 +1047,46 @@ ipcMain.handle('service:setWaylandInputExperimental', async (event, payload) => 
             ? 'Modo Wayland experimental activado. Se permitirá solicitar permisos al compositor para controlar entrada.'
             : 'Modo Wayland experimental desactivado. Se bloqueará el control remoto de entrada en Wayland.'
     };
+});
+
+ipcMain.handle('service:setInterceptionInput', async (_event, payload) => {
+    if (!isWindows) {
+        return {
+            ok: false,
+            enabled: false,
+            message: 'Interception solo está disponible en Windows.'
+        };
+    }
+
+    const enabled = Boolean(payload?.enabled);
+    useInterceptionInput = enabled;
+    await settingsStore.setInterceptionInputEnabled(enabled);
+
+    const probe = enabled ? interceptionKeyboard.probeDriver() : interceptionKeyboard.getLastProbe();
+    if (!enabled) {
+        interceptionKeyboard.destroy();
+    }
+
+    const state = getInterceptionInputState();
+    return {
+        ok: true,
+        enabled: state.enabled,
+        driverReady: state.driverReady,
+        active: state.active,
+        message: enabled && !state.driverReady
+            ? `${state.message} Descarga e instala el driver desde ${INTERCEPTION_RELEASES_URL}`
+            : state.message
+    };
+});
+
+ipcMain.handle('service:probeInterception', () => {
+    interceptionKeyboard.probeDriver();
+    return getInterceptionInputState();
+});
+
+ipcMain.handle('service:openInterceptionReleases', async () => {
+    await shell.openExternal(INTERCEPTION_RELEASES_URL);
+    return { ok: true, url: INTERCEPTION_RELEASES_URL };
 });
 
 function startInternalApiServer() {
@@ -1412,11 +1467,50 @@ function convertRobotKeyName(key) {
     return ROBOT_KEY_ALIASES.get(normalized) || normalized;
 }
 
+function getInterceptionInputState() {
+    const probe = interceptionKeyboard.getLastProbe() || interceptionKeyboard.probeDriver();
+    const driverReady = Boolean(probe?.ready);
+    const active = Boolean(isWindows && useInterceptionInput && driverReady);
+
+    let message = 'Desactivado. Se usa el método estándar de Windows (SendInput).';
+    if (!isWindows) {
+        message = 'Interception solo está disponible en Windows.';
+    } else if (useInterceptionInput && driverReady) {
+        message = 'Interception activo para el teclado remoto.';
+    } else if (useInterceptionInput) {
+        message = probe?.message || 'Activa Interception e instala el driver desde GitHub.';
+    }
+
+    return {
+        available: isWindows,
+        enabled: Boolean(useInterceptionInput),
+        driverReady,
+        packageAvailable: interceptionKeyboard.isPackageAvailable(),
+        keyboardCount: probe?.keyboardCount || 0,
+        active,
+        releasesUrl: INTERCEPTION_RELEASES_URL,
+        message
+    };
+}
+
+function shouldUseInterceptionKeyboard() {
+    return Boolean(isWindows && useInterceptionInput && interceptionKeyboard.isDriverReady());
+}
+
 function handleKeyAction(key, action) {
     const normalized = normalizeKeyName(key);
     const safeAction = action === 'down' ? 'down' : action === 'up' ? 'up' : null;
     if (!normalized || !safeAction) {
         throw new Error('Acción de tecla inválida');
+    }
+
+    if (shouldUseInterceptionKeyboard()) {
+        if (safeAction === 'down') {
+            interceptionKeyboard.keyDown(normalized);
+        } else {
+            interceptionKeyboard.keyUp(normalized);
+        }
+        return;
     }
 
     if (nativeInput && typeof nativeInput.keyDown === 'function' && typeof nativeInput.keyUp === 'function') {
@@ -1446,6 +1540,11 @@ function handleComboInput(keys) {
 
     if (!normalized.length) {
         throw new Error('Combo inválido');
+    }
+
+    if (shouldUseInterceptionKeyboard()) {
+        interceptionKeyboard.keyCombo(normalized);
+        return;
     }
 
     if (nativeInput && typeof nativeInput.keyCombo === 'function') {
@@ -1502,6 +1601,11 @@ function handleSpecialKeyTap(key) {
         throw new Error('Tecla especial inválida');
     }
 
+    if (shouldUseInterceptionKeyboard()) {
+        interceptionKeyboard.keyTap(normalized);
+        return;
+    }
+
     if (nativeInput && typeof nativeInput.keyTap === 'function') {
         nativeInput.keyTap(normalized);
         return;
@@ -1520,6 +1624,15 @@ function handleCharacterInput(payload) {
 
     const normalized = normalizeKeyName(key);
     const isSpecial = SPECIAL_KEYS.has(normalized);
+
+    if (shouldUseInterceptionKeyboard()) {
+        if (isSpecial) {
+            interceptionKeyboard.keyTap(normalized);
+        } else {
+            interceptionKeyboard.typeText(key);
+        }
+        return;
+    }
 
     if (nativeInput && typeof nativeInput.typeText === 'function' && typeof nativeInput.keyTap === 'function') {
         if (isSpecial) {

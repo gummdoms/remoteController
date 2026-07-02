@@ -100,6 +100,7 @@
   },
   "optionalDependencies": {
     "@hensm/ddcci": "^0.1.0",
+    "node-interception": "^2.0.4",
     "robotjs": "^0.6.0"
   },
   "overrides": {

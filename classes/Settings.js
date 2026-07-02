@@ -145,6 +145,17 @@ class SettingsStore {
         await this.setPreference('wayland_input_experimental', enabled ? '1' : '0');
         return { enabled: Boolean(enabled) };
     }
+
+    async getInterceptionInputEnabled(defaultValue = false) {
+        const raw = await this.getPreference('interception_input_enabled', defaultValue ? '1' : '0');
+        const value = String(raw ?? '').toLowerCase();
+        return ['1', 'true', 'yes', 'on'].includes(value);
+    }
+
+    async setInterceptionInputEnabled(enabled) {
+        await this.setPreference('interception_input_enabled', enabled ? '1' : '0');
+        return { enabled: Boolean(enabled) };
+    }
 }
 
 module.exports = SettingsStore;

@@ -16,6 +16,10 @@ $(document).ready(function () {
     const $waylandRow = $('#wayland-experimental-row');
     const $waylandToggle = $('#wayland-experimental-toggle');
     const $waylandStatus = $('#wayland-experimental-status');
+    const $windowsInputSection = $('#windows-input-section');
+    const $interceptionToggle = $('#interception-input-toggle');
+    const $interceptionStatus = $('#interception-input-status');
+    const $refreshInterception = $('#refresh-interception-status');
 
     let authMode = 'login';
     let latestCommands = [];
@@ -118,6 +122,21 @@ $(document).ready(function () {
                         ? 'Modo Wayland experimental activado.'
                         : 'Modo Wayland experimental desactivado.'
                 );
+            }
+
+            const interception = inputControl.interception || {};
+            const showInterceptionControls = Boolean(interception.available);
+            $windowsInputSection.toggle(showInterceptionControls);
+
+            if (showInterceptionControls) {
+                $interceptionToggle.prop('checked', Boolean(interception.enabled));
+                const statusParts = [interception.message || 'Sin estado disponible.'];
+                if (interception.enabled && interception.driverReady) {
+                    statusParts.push('Listo para usar sin reiniciar la app.');
+                } else if (interception.enabled && !interception.driverReady) {
+                    statusParts.push('Instala el driver y reinicia Windows solo la primera vez.');
+                }
+                $interceptionStatus.text(statusParts.join(' '));
             }
         } catch (error) {
             console.error('No se pudo cargar estado del servicio:', error);
@@ -263,6 +282,50 @@ $(document).ready(function () {
         } finally {
             $waylandToggle.prop('disabled', false);
         }
+    });
+
+    $interceptionToggle.on('change', async function () {
+        const enabled = $(this).is(':checked');
+        $interceptionToggle.prop('disabled', true);
+        try {
+            const result = await api.invoke('service:setInterceptionInput', { enabled });
+            await refreshServiceState();
+            if (enabled && !result.driverReady) {
+                const openDriver = await Swal.fire({
+                    icon: 'info',
+                    title: 'Driver Interception no detectado',
+                    text: 'Descarga e instala Interception desde GitHub. Solo necesitas reiniciar Windows la primera vez.',
+                    showCancelButton: true,
+                    confirmButtonText: 'Abrir releases',
+                    cancelButtonText: 'Cerrar'
+                });
+                if (openDriver.isConfirmed) {
+                    await api.invoke('service:openInterceptionReleases');
+                }
+            }
+        } catch (error) {
+            $interceptionToggle.prop('checked', !enabled);
+            Swal.fire({ icon: 'error', title: 'No se pudo actualizar', text: error.message || 'Error al actualizar Interception.' });
+        } finally {
+            $interceptionToggle.prop('disabled', false);
+        }
+    });
+
+    $refreshInterception.on('click', async () => {
+        $refreshInterception.prop('disabled', true);
+        try {
+            await api.invoke('service:probeInterception');
+            await refreshServiceState();
+        } catch (error) {
+            Swal.fire({ icon: 'error', title: 'No se pudo actualizar', text: error.message || 'Error al comprobar Interception.' });
+        } finally {
+            $refreshInterception.prop('disabled', false);
+        }
+    });
+
+    $('#interception-download-link').on('click', async (event) => {
+        event.preventDefault();
+        await api.invoke('service:openInterceptionReleases');
     });
 
     $('#show-input-commands').on('click', async () => {
