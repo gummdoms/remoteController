@@ -1351,6 +1351,8 @@ const SPECIAL_KEYS = new Set([
     'up', 'down', 'left', 'right', 'capslock', 'numlock', 'scrolllock',
     'numpad0', 'numpad1', 'numpad2', 'numpad3', 'numpad4',
     'numpad5', 'numpad6', 'numpad7', 'numpad8', 'numpad9',
+    'numpadadd', 'numpadsubtract', 'numpadmultiply', 'numpaddivide',
+    'numpaddecimal', 'numpadenter',
     'printscreen', 'pause', 'pausebreak',
     'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'f9', 'f10', 'f11', 'f12',
     'media_play', 'media_stop', 'media_next', 'media_prev',
@@ -1392,6 +1394,12 @@ const ROBOT_KEY_ALIASES = new Map([
     ['numpad7', 'numpad_7'],
     ['numpad8', 'numpad_8'],
     ['numpad9', 'numpad_9'],
+    ['numpadadd', 'numpad_add'],
+    ['numpadsubtract', 'numpad_subtract'],
+    ['numpadmultiply', 'numpad_multiply'],
+    ['numpaddivide', 'numpad_divide'],
+    ['numpaddecimal', 'numpad_decimal'],
+    ['numpadenter', 'numpad_enter'],
     ['pausebreak', 'pause']
 ]);
 
@@ -1488,6 +1496,23 @@ function resolveCharacter({ char, codePoint }) {
     throw new Error('Caracter inválido');
 }
 
+function handleSpecialKeyTap(key) {
+    const normalized = normalizeKeyName(key);
+    if (!SPECIAL_KEYS.has(normalized)) {
+        throw new Error('Tecla especial inválida');
+    }
+
+    if (nativeInput && typeof nativeInput.keyTap === 'function') {
+        nativeInput.keyTap(normalized);
+        return;
+    }
+
+    if (!hasRobotFallback()) {
+        throw new Error(INPUT_PROVIDER_UNAVAILABLE_MSG);
+    }
+    robot.keyTap(convertRobotKeyName(normalized));
+}
+
 function handleCharacterInput(payload) {
     const key = typeof payload === 'object'
         ? resolveCharacter(payload)
@@ -1521,7 +1546,7 @@ function handleInputPayload(body) {
         throw new Error('Payload inválido');
     }
 
-    const { combo, key, action } = body;
+    const { combo, key, action, char, codePoint } = body;
 
     if (Array.isArray(combo) && combo.length) {
         handleComboInput(combo);
@@ -1533,7 +1558,15 @@ function handleInputPayload(body) {
         return;
     }
 
-    handleCharacterInput(body);
+    if (key && !action) {
+        const normalized = normalizeKeyName(key);
+        if (SPECIAL_KEYS.has(normalized)) {
+            handleSpecialKeyTap(normalized);
+            return;
+        }
+    }
+
+    handleCharacterInput({ char: char ?? key, codePoint });
 }
 
 server.post('/teclear', (req, res) => {

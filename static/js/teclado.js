@@ -31,6 +31,32 @@ $(document).ready(function () {
         return typeof value === 'string' ? value : value.toString();
     }
 
+    function readButtonKey($button) {
+        return toKeyString($button.attr('data-key'));
+    }
+
+    const NAMED_SPECIAL_KEYS = new Set([
+        'backspace', 'enter', 'return', 'space', 'tab', 'esc', 'escape',
+        'insert', 'delete', 'del', 'home', 'end', 'pageup', 'pagedown',
+        'up', 'down', 'left', 'right', 'capslock', 'numlock', 'scrolllock',
+        'numpad0', 'numpad1', 'numpad2', 'numpad3', 'numpad4',
+        'numpad5', 'numpad6', 'numpad7', 'numpad8', 'numpad9',
+        'numpadadd', 'numpadsubtract', 'numpadmultiply', 'numpaddivide',
+        'numpaddecimal', 'numpadenter',
+        'printscreen', 'pause', 'pausebreak',
+        'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'f9', 'f10', 'f11', 'f12'
+    ]);
+
+    function isNamedSpecialKey(key) {
+        const normalized = key.toLowerCase();
+        return normalized.startsWith('numpad') || NAMED_SPECIAL_KEYS.has(normalized);
+    }
+
+    function buildKeyPayload(key) {
+        const normalized = key.toLowerCase();
+        return isNamedSpecialKey(key) ? { key: normalized } : { char: key };
+    }
+
     function sendCharacterKey(rawKey) {
         const key = toKeyString(rawKey);
         if (!key) {
@@ -39,10 +65,10 @@ $(document).ready(function () {
 
         if (activeModifiers.size) {
             const combo = Array.from(activeModifiers);
-            combo.push(key);
+            combo.push(key.toLowerCase());
             return sendPayload({ combo }).always(consumeModifiers);
         }
-        return sendPayload({ char: key });
+        return sendPayload(buildKeyPayload(key));
     }
 
     function scheduleHold($button, key) {
@@ -85,7 +111,7 @@ $(document).ready(function () {
             event.preventDefault();
             return;
         }
-        const key = toKeyString($button.data('key'));
+        const key = readButtonKey($button);
         if (key === undefined) {
             return;
         }
@@ -95,7 +121,7 @@ $(document).ready(function () {
     $(document).on('pointerdown', '.btn-teclado', function (event) {
         event.preventDefault();
         const $button = $(this);
-        const key = toKeyString($button.data('key'));
+        const key = readButtonKey($button);
         if (key === undefined || $button.data('hold') === false || $button.data('holdActive')) {
             return;
         }
@@ -136,7 +162,7 @@ $(document).ready(function () {
     }
 
     $(document).on('click', '.btn-teclado-cod', async function () {
-        const key = toKeyString($(this).data('key'));
+        const key = readButtonKey($(this));
         if (!key) {
             return;
         }

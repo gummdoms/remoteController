@@ -1,6 +1,6 @@
 {
   "name": "remotecontrollers",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "main": "app.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
@@ -11,9 +11,10 @@
     "dist:linux": "electron-builder --linux AppImage",
     "dist:linux:pacman": "electron-builder --linux pacman",
     "dist:arch:pkg": "bash distros/archlinux/build-package.sh",
-    "dist:arch:publish": "bash distros/archlinux/publish-r2.sh",
-    "dist:arch:upload": "bash distros/archlinux/upload-r2.sh",
+    "dist:arch:publish": "bash distros/archlinux/publish-datalake.sh",
+    "dist:arch:upload": "bash distros/archlinux/upload-datalake.sh",
     "dist:arch:release": "bash distros/archlinux/release.sh",
+    "dist:release:upload": "node scripts/upload-release-assets.js",
     "postinstall": "electron-builder install-app-deps",
     "build:native": "cd modules && npm install && cd .. && electron-builder install-app-deps",
     "rebuild:native": "cd modules && npm run rebuild",
@@ -36,7 +37,8 @@
   "description": "Control remoto seguro de tu PC desde la web o el móvil (BJRSoftware)",
   "config": {
     "cloudUrl": "https://remote-controller.bjrsoftware.uk",
-    "releasesUrl": "https://realses.bjrsoftware.uk/arch/os/x86_64"
+    "releasesUrl": "https://datalake.dambra-os.com/public/remote-controller/releases/arch/x86_64",
+    "githubReleasesUrl": "https://github.com/gummdoms/remoteController/releases"
   },
   "build": {
     "appId": "com.bjrsoftware.remotecontrollers",

@@ -10,8 +10,12 @@
 
 namespace
 {
-    bool NeedsExtendedKeyFlag(WORD vk)
+    bool NeedsExtendedKeyFlag(WORD vk, bool forceExtended = false)
     {
+        if (forceExtended)
+        {
+            return true;
+        }
         switch (vk)
         {
         case VK_LEFT:
@@ -57,15 +61,34 @@ namespace
         }
     }
 
-    void SendVirtualKeyEvent(WORD vk, bool keyDown)
+    WORD GetScanCode(WORD vk)
+    {
+        WORD scanCode = static_cast<WORD>(MapVirtualKey(vk, MAPVK_VK_TO_VSC));
+        if (scanCode)
+        {
+            return scanCode;
+        }
+
+        static const std::map<WORD, WORD> NUMPAD_SCAN_CODES = {
+            {VK_NUMPAD0, 0x52}, {VK_NUMPAD1, 0x4F}, {VK_NUMPAD2, 0x50}, {VK_NUMPAD3, 0x51},
+            {VK_NUMPAD4, 0x4B}, {VK_NUMPAD5, 0x4C}, {VK_NUMPAD6, 0x4D}, {VK_NUMPAD7, 0x47},
+            {VK_NUMPAD8, 0x48}, {VK_NUMPAD9, 0x49}, {VK_DECIMAL, 0x53}, {VK_DIVIDE, 0x35},
+            {VK_MULTIPLY, 0x37}, {VK_SUBTRACT, 0x4A}, {VK_ADD, 0x4E}};
+
+        auto it = NUMPAD_SCAN_CODES.find(vk);
+        return it != NUMPAD_SCAN_CODES.end() ? it->second : 0;
+    }
+
+    void SendVirtualKeyEvent(WORD vk, bool keyDown, bool forceExtended = false)
     {
         INPUT input = {};
         input.type = INPUT_KEYBOARD;
 
-        WORD scanCode = static_cast<WORD>(MapVirtualKey(vk, MAPVK_VK_TO_VSC));
+        WORD scanCode = GetScanCode(vk);
         if (scanCode)
         {
             input.ki.wScan = scanCode;
+            input.ki.wVk = vk;
             input.ki.dwFlags = KEYEVENTF_SCANCODE;
         }
         else
@@ -73,7 +96,7 @@ namespace
             input.ki.wVk = vk;
         }
 
-        if (NeedsExtendedKeyFlag(vk))
+        if (NeedsExtendedKeyFlag(vk, forceExtended))
         {
             input.ki.dwFlags |= KEYEVENTF_EXTENDEDKEY;
         }
@@ -86,10 +109,10 @@ namespace
         SendInput(1, &input, sizeof(INPUT));
     }
 
-    void SendVirtualKeyPress(WORD vk)
+    void SendVirtualKeyPress(WORD vk, bool forceExtended = false)
     {
         INPUT inputs[2] = {};
-        WORD scanCode = static_cast<WORD>(MapVirtualKey(vk, MAPVK_VK_TO_VSC));
+        WORD scanCode = GetScanCode(vk);
 
         for (int i = 0; i < 2; ++i)
         {
@@ -97,6 +120,7 @@ namespace
             if (scanCode)
             {
                 inputs[i].ki.wScan = scanCode;
+                inputs[i].ki.wVk = vk;
                 inputs[i].ki.dwFlags = KEYEVENTF_SCANCODE;
             }
             else
@@ -104,7 +128,7 @@ namespace
                 inputs[i].ki.wVk = vk;
             }
 
-            if (NeedsExtendedKeyFlag(vk))
+            if (NeedsExtendedKeyFlag(vk, forceExtended))
             {
                 inputs[i].ki.dwFlags |= KEYEVENTF_EXTENDEDKEY;
             }
@@ -112,6 +136,11 @@ namespace
 
         inputs[1].ki.dwFlags |= KEYEVENTF_KEYUP;
         SendInput(2, inputs, sizeof(INPUT));
+    }
+
+    bool NeedsExtendedKeyName(const std::string &key)
+    {
+        return key == "numpadenter" || key == "numpaddivide";
     }
 
     void SendUnicodeCharacter(wchar_t ch)
@@ -151,7 +180,7 @@ namespace
     }
 
     const std::map<std::string, WORD> SPECIAL_KEY_MAP = {
-        {"backspace", VK_BACK}, {"enter", VK_RETURN}, {"return", VK_RETURN}, {"space", VK_SPACE}, {"tab", VK_TAB}, {"esc", VK_ESCAPE}, {"escape", VK_ESCAPE}, {"delete", VK_DELETE}, {"del", VK_DELETE}, {"insert", VK_INSERT}, {"home", VK_HOME}, {"end", VK_END}, {"pageup", VK_PRIOR}, {"pagedown", VK_NEXT}, {"up", VK_UP}, {"down", VK_DOWN}, {"left", VK_LEFT}, {"right", VK_RIGHT}, {"capslock", VK_CAPITAL}, {"numlock", VK_NUMLOCK}, {"scrolllock", VK_SCROLL}, {"numpad0", VK_NUMPAD0}, {"numpad1", VK_NUMPAD1}, {"numpad2", VK_NUMPAD2}, {"numpad3", VK_NUMPAD3}, {"numpad4", VK_NUMPAD4}, {"numpad5", VK_NUMPAD5}, {"numpad6", VK_NUMPAD6}, {"numpad7", VK_NUMPAD7}, {"numpad8", VK_NUMPAD8}, {"numpad9", VK_NUMPAD9}, {"printscreen", VK_SNAPSHOT}, {"pause", VK_PAUSE}, {"pausebreak", VK_PAUSE}, {"f1", VK_F1}, {"f2", VK_F2}, {"f3", VK_F3}, {"f4", VK_F4}, {"f5", VK_F5}, {"f6", VK_F6}, {"f7", VK_F7}, {"f8", VK_F8}, {"f9", VK_F9}, {"f10", VK_F10}, {"f11", VK_F11}, {"f12", VK_F12}, {"media_play", VK_MEDIA_PLAY_PAUSE}, {"media_stop", VK_MEDIA_STOP}, {"media_next", VK_MEDIA_NEXT_TRACK}, {"media_prev", VK_MEDIA_PREV_TRACK}, {"volume_up", VK_VOLUME_UP}, {"volume_down", VK_VOLUME_DOWN}, {"volume_mute", VK_VOLUME_MUTE}, {"lwin", VK_LWIN}, {"rwin", VK_RWIN}, {"win", VK_LWIN}, {"windows", VK_LWIN}, {"super", VK_LWIN}, {"meta", VK_LWIN}, {"ctrl", VK_CONTROL}, {"control", VK_CONTROL}, {"lctrl", VK_LCONTROL}, {"rctrl", VK_RCONTROL}, {"alt", VK_MENU}, {"lalt", VK_LMENU}, {"ralt", VK_RMENU}, {"shift", VK_SHIFT}, {"lshift", VK_LSHIFT}, {"rshift", VK_RSHIFT}, {"mayus", VK_SHIFT}};
+        {"backspace", VK_BACK}, {"enter", VK_RETURN}, {"return", VK_RETURN}, {"space", VK_SPACE}, {"tab", VK_TAB}, {"esc", VK_ESCAPE}, {"escape", VK_ESCAPE}, {"delete", VK_DELETE}, {"del", VK_DELETE}, {"insert", VK_INSERT}, {"home", VK_HOME}, {"end", VK_END}, {"pageup", VK_PRIOR}, {"pagedown", VK_NEXT}, {"up", VK_UP}, {"down", VK_DOWN}, {"left", VK_LEFT}, {"right", VK_RIGHT}, {"capslock", VK_CAPITAL}, {"numlock", VK_NUMLOCK}, {"scrolllock", VK_SCROLL}, {"numpad0", VK_NUMPAD0}, {"numpad1", VK_NUMPAD1}, {"numpad2", VK_NUMPAD2}, {"numpad3", VK_NUMPAD3}, {"numpad4", VK_NUMPAD4}, {"numpad5", VK_NUMPAD5}, {"numpad6", VK_NUMPAD6}, {"numpad7", VK_NUMPAD7}, {"numpad8", VK_NUMPAD8}, {"numpad9", VK_NUMPAD9}, {"numpadadd", VK_ADD}, {"numpadsubtract", VK_SUBTRACT}, {"numpadmultiply", VK_MULTIPLY}, {"numpaddivide", VK_DIVIDE}, {"numpaddecimal", VK_DECIMAL}, {"numpadenter", VK_RETURN}, {"printscreen", VK_SNAPSHOT}, {"pause", VK_PAUSE}, {"pausebreak", VK_PAUSE}, {"f1", VK_F1}, {"f2", VK_F2}, {"f3", VK_F3}, {"f4", VK_F4}, {"f5", VK_F5}, {"f6", VK_F6}, {"f7", VK_F7}, {"f8", VK_F8}, {"f9", VK_F9}, {"f10", VK_F10}, {"f11", VK_F11}, {"f12", VK_F12}, {"media_play", VK_MEDIA_PLAY_PAUSE}, {"media_stop", VK_MEDIA_STOP}, {"media_next", VK_MEDIA_NEXT_TRACK}, {"media_prev", VK_MEDIA_PREV_TRACK}, {"volume_up", VK_VOLUME_UP}, {"volume_down", VK_VOLUME_DOWN}, {"volume_mute", VK_VOLUME_MUTE}, {"lwin", VK_LWIN}, {"rwin", VK_RWIN}, {"win", VK_LWIN}, {"windows", VK_LWIN}, {"super", VK_LWIN}, {"meta", VK_LWIN}, {"ctrl", VK_CONTROL}, {"control", VK_CONTROL}, {"lctrl", VK_LCONTROL}, {"rctrl", VK_RCONTROL}, {"alt", VK_MENU}, {"lalt", VK_LMENU}, {"ralt", VK_RMENU}, {"shift", VK_SHIFT}, {"lshift", VK_LSHIFT}, {"rshift", VK_RSHIFT}, {"mayus", VK_SHIFT}};
 }
 
 Napi::Value MoveMouseRelative(const Napi::CallbackInfo &info)
@@ -381,7 +410,7 @@ Napi::Value KeyTap(const Napi::CallbackInfo &info)
         return env.Null();
     }
 
-    SendVirtualKeyPress(it->second);
+    SendVirtualKeyPress(it->second, NeedsExtendedKeyName(key));
     return Napi::Boolean::New(env, true);
 }
 
@@ -401,7 +430,7 @@ Napi::Value KeyDown(const Napi::CallbackInfo &info)
     auto it = SPECIAL_KEY_MAP.find(key);
     if (it != SPECIAL_KEY_MAP.end())
     {
-        SendVirtualKeyEvent(it->second, true);
+        SendVirtualKeyEvent(it->second, true, NeedsExtendedKeyName(key));
         return Napi::Boolean::New(env, true);
     }
 
@@ -437,7 +466,7 @@ Napi::Value KeyUp(const Napi::CallbackInfo &info)
     auto it = SPECIAL_KEY_MAP.find(key);
     if (it != SPECIAL_KEY_MAP.end())
     {
-        SendVirtualKeyEvent(it->second, false);
+        SendVirtualKeyEvent(it->second, false, NeedsExtendedKeyName(key));
         return Napi::Boolean::New(env, true);
     }
 
@@ -651,6 +680,23 @@ namespace
         return lower;
     }
 
+    std::optional<KeyCode> FallbackKeycodeForKeysym(KeySym keysym)
+    {
+        static const std::unordered_map<KeySym, KeyCode> FALLBACK_KP_KEYCODES = {
+            {XK_KP_0, 90}, {XK_KP_1, 87}, {XK_KP_2, 88}, {XK_KP_3, 89},
+            {XK_KP_4, 83}, {XK_KP_5, 84}, {XK_KP_6, 85}, {XK_KP_7, 79},
+            {XK_KP_8, 80}, {XK_KP_9, 81}, {XK_KP_Add, 86}, {XK_KP_Subtract, 82},
+            {XK_KP_Multiply, 63}, {XK_KP_Divide, 106}, {XK_KP_Decimal, 91},
+            {XK_KP_Enter, 108}};
+
+        auto it = FALLBACK_KP_KEYCODES.find(keysym);
+        if (it == FALLBACK_KP_KEYCODES.end())
+        {
+            return std::nullopt;
+        }
+        return it->second;
+    }
+
     bool SendKeySym(KeySym keysym, bool keyDown)
     {
         Display *display = GetDisplay();
@@ -662,7 +708,35 @@ namespace
         KeyCode keycode = XKeysymToKeycode(display, keysym);
         if (keycode == 0)
         {
-            return false;
+            int minKeycode = 0;
+            int maxKeycode = 0;
+            XDisplayKeycodes(display, &minKeycode, &maxKeycode);
+            for (int kc = minKeycode; kc <= maxKeycode; ++kc)
+            {
+                for (int group = 0; group < 4; ++group)
+                {
+                    KeySym mapped = XkbKeycodeToKeysym(display, static_cast<KeyCode>(kc), group, 0);
+                    if (mapped == keysym)
+                    {
+                        keycode = static_cast<KeyCode>(kc);
+                        break;
+                    }
+                }
+                if (keycode != 0)
+                {
+                    break;
+                }
+            }
+        }
+
+        if (keycode == 0)
+        {
+            auto fallback = FallbackKeycodeForKeysym(keysym);
+            if (!fallback)
+            {
+                return false;
+            }
+            keycode = *fallback;
         }
 
         XTestFakeKeyEvent(display, keycode, keyDown ? True : False, CurrentTime);
@@ -688,7 +762,7 @@ namespace
     }
 
     const std::unordered_map<std::string, KeySym> SPECIAL_KEY_MAP = {
-        {"backspace", XK_BackSpace}, {"enter", XK_Return}, {"return", XK_Return}, {"space", XK_space}, {"tab", XK_Tab}, {"esc", XK_Escape}, {"escape", XK_Escape}, {"delete", XK_Delete}, {"del", XK_Delete}, {"insert", XK_Insert}, {"home", XK_Home}, {"end", XK_End}, {"pageup", XK_Prior}, {"pagedown", XK_Next}, {"up", XK_Up}, {"down", XK_Down}, {"left", XK_Left}, {"right", XK_Right}, {"capslock", XK_Caps_Lock}, {"numlock", XK_Num_Lock}, {"scrolllock", XK_Scroll_Lock}, {"numpad0", XK_KP_0}, {"numpad1", XK_KP_1}, {"numpad2", XK_KP_2}, {"numpad3", XK_KP_3}, {"numpad4", XK_KP_4}, {"numpad5", XK_KP_5}, {"numpad6", XK_KP_6}, {"numpad7", XK_KP_7}, {"numpad8", XK_KP_8}, {"numpad9", XK_KP_9}, {"printscreen", XK_Print}, {"pause", XK_Pause}, {"pausebreak", XK_Pause}, {"f1", XK_F1}, {"f2", XK_F2}, {"f3", XK_F3}, {"f4", XK_F4}, {"f5", XK_F5}, {"f6", XK_F6}, {"f7", XK_F7}, {"f8", XK_F8}, {"f9", XK_F9}, {"f10", XK_F10}, {"f11", XK_F11}, {"f12", XK_F12}, {"media_play", XF86XK_AudioPlay}, {"media_stop", XF86XK_AudioStop}, {"media_next", XF86XK_AudioNext}, {"media_prev", XF86XK_AudioPrev}, {"volume_up", XF86XK_AudioRaiseVolume}, {"volume_down", XF86XK_AudioLowerVolume}, {"volume_mute", XF86XK_AudioMute}, {"lwin", XK_Super_L}, {"rwin", XK_Super_R}, {"win", XK_Super_L}, {"windows", XK_Super_L}, {"super", XK_Super_L}, {"meta", XK_Super_L}, {"ctrl", XK_Control_L}, {"control", XK_Control_L}, {"lctrl", XK_Control_L}, {"rctrl", XK_Control_R}, {"alt", XK_Alt_L}, {"lalt", XK_Alt_L}, {"ralt", XK_Alt_R}, {"shift", XK_Shift_L}, {"lshift", XK_Shift_L}, {"rshift", XK_Shift_R}, {"mayus", XK_Shift_L}};
+        {"backspace", XK_BackSpace}, {"enter", XK_Return}, {"return", XK_Return}, {"space", XK_space}, {"tab", XK_Tab}, {"esc", XK_Escape}, {"escape", XK_Escape}, {"delete", XK_Delete}, {"del", XK_Delete}, {"insert", XK_Insert}, {"home", XK_Home}, {"end", XK_End}, {"pageup", XK_Prior}, {"pagedown", XK_Next}, {"up", XK_Up}, {"down", XK_Down}, {"left", XK_Left}, {"right", XK_Right}, {"capslock", XK_Caps_Lock}, {"numlock", XK_Num_Lock}, {"scrolllock", XK_Scroll_Lock}, {"numpad0", XK_KP_0}, {"numpad1", XK_KP_1}, {"numpad2", XK_KP_2}, {"numpad3", XK_KP_3}, {"numpad4", XK_KP_4}, {"numpad5", XK_KP_5}, {"numpad6", XK_KP_6}, {"numpad7", XK_KP_7}, {"numpad8", XK_KP_8}, {"numpad9", XK_KP_9}, {"numpadadd", XK_KP_Add}, {"numpadsubtract", XK_KP_Subtract}, {"numpadmultiply", XK_KP_Multiply}, {"numpaddivide", XK_KP_Divide}, {"numpaddecimal", XK_KP_Decimal}, {"numpadenter", XK_KP_Enter}, {"printscreen", XK_Print}, {"pause", XK_Pause}, {"pausebreak", XK_Pause}, {"f1", XK_F1}, {"f2", XK_F2}, {"f3", XK_F3}, {"f4", XK_F4}, {"f5", XK_F5}, {"f6", XK_F6}, {"f7", XK_F7}, {"f8", XK_F8}, {"f9", XK_F9}, {"f10", XK_F10}, {"f11", XK_F11}, {"f12", XK_F12}, {"media_play", XF86XK_AudioPlay}, {"media_stop", XF86XK_AudioStop}, {"media_next", XF86XK_AudioNext}, {"media_prev", XF86XK_AudioPrev}, {"volume_up", XF86XK_AudioRaiseVolume}, {"volume_down", XF86XK_AudioLowerVolume}, {"volume_mute", XF86XK_AudioMute}, {"lwin", XK_Super_L}, {"rwin", XK_Super_R}, {"win", XK_Super_L}, {"windows", XK_Super_L}, {"super", XK_Super_L}, {"meta", XK_Super_L}, {"ctrl", XK_Control_L}, {"control", XK_Control_L}, {"lctrl", XK_Control_L}, {"rctrl", XK_Control_R}, {"alt", XK_Alt_L}, {"lalt", XK_Alt_L}, {"ralt", XK_Alt_R}, {"shift", XK_Shift_L}, {"lshift", XK_Shift_L}, {"rshift", XK_Shift_R}, {"mayus", XK_Shift_L}};
 
     bool IsModifier(KeySym keysym)
     {

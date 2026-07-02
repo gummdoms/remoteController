@@ -246,10 +246,10 @@ function teclado_only_numeric() {
      <div class="teclado-numerico">
                 <div class="content-top">
                     <div class="content-left">
-                        <button class="btn btn-teclado" data-key="+">+</button>
-                        <button class="btn btn-teclado" data-key="-">-</button>
-                        <button class="btn btn-teclado" data-key="*">*</button>
-                        <button class="btn btn-teclado" data-key="/">/</button>
+                        <button class="btn btn-teclado" data-key="numpadadd">+</button>
+                        <button class="btn btn-teclado" data-key="numpadsubtract">-</button>
+                        <button class="btn btn-teclado" data-key="numpadmultiply">*</button>
+                        <button class="btn btn-teclado" data-key="numpaddivide">/</button>
                         <button class="btn btn-teclado" data-key="(">(</button>
                         <button class="btn btn-teclado" data-key=")">)</button>
                     </div>
@@ -286,8 +286,8 @@ function teclado_only_numeric() {
                     <button class="btn btn-number">!?#</button>
                     <button class="btn btn-teclado btn-cero" data-key="numpad0">0</button>
                     <button class="btn btn-teclado" data-key="=">=</button>
-                    <button class="btn btn-teclado" data-key=".">.</button>
-                    <button class="btn btn-teclado enter" data-key="enter" data-hold="true">
+                    <button class="btn btn-teclado" data-key="numpaddecimal">.</button>
+                    <button class="btn btn-teclado enter" data-key="numpadenter" data-hold="true">
                         <i class="bi bi-arrow-return-left"></i>
                     </button>
                 </div>
