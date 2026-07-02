@@ -176,6 +176,7 @@ jobs:
                   fi
                   chown -R builder:builder "$PWD/$APP_DIR"
                   su builder -c "cd '$PWD/$APP_DIR' && npm run dist:arch:pkg"
+                  su builder -c "cd '$PWD/$APP_DIR' && npm run dist:arch:publish"
 
             - name: Upload Arch Linux artifact
               uses: actions/upload-artifact@v4
@@ -183,7 +184,9 @@ jobs:
                   name: archlinux-package
                   path: |
                       dist/*.pkg.tar.zst
+                      dist/datalake-upload/**
                       DesktopApp/dist/*.pkg.tar.zst
+                      DesktopApp/dist/datalake-upload/**
 
     publish-auto-release-main:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.actor != 'github-actions[bot]'
@@ -218,6 +221,31 @@ jobs:
               with:
                   name: archlinux-package
                   path: release-assets/arch
+
+            - name: Prepare Arch repo files for upload
+              run: |
+                  if [[ -d release-assets/arch/datalake-upload ]]; then
+                    mkdir -p release-assets/arch/repo
+                    cp -a release-assets/arch/datalake-upload/. release-assets/arch/repo/
+                  fi
+
+            - name: Setup Node.js for data lake upload
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+
+            - name: Upload assets to data lake
+              env:
+                  DATA_LAKE_URL: ${{ secrets.DATA_LAKE_URL }}
+                  DATA_LAKE_USER: ${{ secrets.DATA_LAKE_USER }}
+                  DATA_LAKE_PASSWORD: ${{ secrets.DATA_LAKE_PASSWORD }}
+                  DATA_LAKE_STORAGE_PATH: ${{ secrets.DATA_LAKE_STORAGE_PATH }}
+                  RELEASES_BASE: ${{ secrets.RELEASES_BASE }}
+              run: |
+                  APP_DIR="."
+                  if [[ -f "DesktopApp/package.json" ]]; then APP_DIR="DesktopApp"; fi
+                  cd "$APP_DIR"
+                  node scripts/upload-ci-assets.js "$GITHUB_WORKSPACE/release-assets"
 
             - name: Build release notes and update README
               id: release_meta
@@ -354,6 +382,31 @@ jobs:
               with:
                   name: archlinux-package
                   path: release-assets/arch
+
+            - name: Prepare Arch repo files for upload
+              run: |
+                  if [[ -d release-assets/arch/datalake-upload ]]; then
+                    mkdir -p release-assets/arch/repo
+                    cp -a release-assets/arch/datalake-upload/. release-assets/arch/repo/
+                  fi
+
+            - name: Setup Node.js for data lake upload
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+
+            - name: Upload assets to data lake
+              env:
+                  DATA_LAKE_URL: ${{ secrets.DATA_LAKE_URL }}
+                  DATA_LAKE_USER: ${{ secrets.DATA_LAKE_USER }}
+                  DATA_LAKE_PASSWORD: ${{ secrets.DATA_LAKE_PASSWORD }}
+                  DATA_LAKE_STORAGE_PATH: ${{ secrets.DATA_LAKE_STORAGE_PATH }}
+                  RELEASES_BASE: ${{ secrets.RELEASES_BASE }}
+              run: |
+                  APP_DIR="."
+                  if [[ -f "DesktopApp/package.json" ]]; then APP_DIR="DesktopApp"; fi
+                  cd "$APP_DIR"
+                  node scripts/upload-ci-assets.js "$GITHUB_WORKSPACE/release-assets"
 
             - name: Build release notes from recent commits
               run: |

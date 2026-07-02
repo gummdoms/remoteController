@@ -15,6 +15,7 @@
     "dist:arch:upload": "bash distros/archlinux/upload-datalake.sh",
     "dist:arch:release": "bash distros/archlinux/release.sh",
     "dist:release:upload": "node scripts/upload-release-assets.js",
+    "dist:release:upload:ci": "node scripts/upload-ci-assets.js",
     "postinstall": "electron-builder install-app-deps",
     "build:native": "cd modules && npm install && cd .. && electron-builder install-app-deps",
     "rebuild:native": "cd modules && npm run rebuild",
