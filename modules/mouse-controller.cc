@@ -79,6 +79,13 @@ namespace
         return it != NUMPAD_SCAN_CODES.end() ? it->second : 0;
     }
 
+    bool IsNumpadVirtualKey(WORD vk)
+    {
+        return (vk >= VK_NUMPAD0 && vk <= VK_NUMPAD9)
+            || vk == VK_MULTIPLY || vk == VK_ADD || vk == VK_SEPARATOR
+            || vk == VK_SUBTRACT || vk == VK_DECIMAL || vk == VK_DIVIDE;
+    }
+
     void SendVirtualKeyEvent(WORD vk, bool keyDown, bool forceExtended = false)
     {
         INPUT input = {};
@@ -88,8 +95,12 @@ namespace
         if (scanCode)
         {
             input.ki.wScan = scanCode;
-            input.ki.wVk = vk;
             input.ki.dwFlags = KEYEVENTF_SCANCODE;
+            // Numpad físico: solo scan code (wVk=0) — más fiel al hardware real.
+            if (!IsNumpadVirtualKey(vk))
+            {
+                input.ki.wVk = vk;
+            }
         }
         else
         {
@@ -111,31 +122,8 @@ namespace
 
     void SendVirtualKeyPress(WORD vk, bool forceExtended = false)
     {
-        INPUT inputs[2] = {};
-        WORD scanCode = GetScanCode(vk);
-
-        for (int i = 0; i < 2; ++i)
-        {
-            inputs[i].type = INPUT_KEYBOARD;
-            if (scanCode)
-            {
-                inputs[i].ki.wScan = scanCode;
-                inputs[i].ki.wVk = vk;
-                inputs[i].ki.dwFlags = KEYEVENTF_SCANCODE;
-            }
-            else
-            {
-                inputs[i].ki.wVk = vk;
-            }
-
-            if (NeedsExtendedKeyFlag(vk, forceExtended))
-            {
-                inputs[i].ki.dwFlags |= KEYEVENTF_EXTENDEDKEY;
-            }
-        }
-
-        inputs[1].ki.dwFlags |= KEYEVENTF_KEYUP;
-        SendInput(2, inputs, sizeof(INPUT));
+        SendVirtualKeyEvent(vk, true, forceExtended);
+        SendVirtualKeyEvent(vk, false, forceExtended);
     }
 
     bool NeedsExtendedKeyName(const std::string &key)
