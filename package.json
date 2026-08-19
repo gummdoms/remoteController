@@ -109,7 +109,6 @@
     }
   },
   "devDependencies": {
-    "@electron/rebuild": "^4.2.0",
     "electron": "^38.2.2",
     "electron-builder": "^26.0.12",
     "sass": "^1.94.0"
