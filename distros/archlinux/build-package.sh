@@ -53,12 +53,16 @@ sed -i "s/^pkgver=.*/pkgver=${VERSION}/" "$PKGROOT/PKGBUILD"
 (
   cd "$PKGROOT"
   makepkg -f --noconfirm
-  cp -f remotecontrollers-bin-"${VERSION}"-1-x86_64.pkg.tar.zst "$DIST_DIR/"
+  PKG_FILE="$(ls remotecontrollers-bin-*-x86_64.pkg.tar.zst 2>/dev/null | head -1 || true)"
+  if [[ -z "$PKG_FILE" ]]; then
+    echo "Error: no se generó el paquete .pkg.tar.zst" >&2
+    exit 1
+  fi
+  cp -f "$PKG_FILE" "$DIST_DIR/"
+  echo
+  echo "Paquete generado:"
+  echo "  $DIST_DIR/$PKG_FILE"
 )
-
 echo
-echo "Paquete generado:"
-echo "  $DIST_DIR/remotecontrollers-bin-${VERSION}-1-x86_64.pkg.tar.zst"
-echo
-echo "Sube dist/r2-repo/* a R2: arch/os/x86_64/ (https://realses.bjrsoftware.uk/arch/os/x86_64/)"
 echo "O ejecuta: npm run dist:arch:publish"
+echo "O sube dist/r2-repo/* a R2: arch/os/x86_64/ (https://realses.bjrsoftware.uk/arch/os/x86_64/)"
