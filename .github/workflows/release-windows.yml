@@ -85,7 +85,7 @@ jobs:
             - name: Install Linux build dependencies
               run: |
                   sudo apt-get update
-                  sudo apt-get install -y build-essential python3 make g++ libx11-dev libxtst-dev libxi-dev
+                  sudo apt-get install -y build-essential python3 make g++ libx11-dev libxtst-dev libxi-dev libxext-dev libpng-dev
 
             - name: Install dependencies
               run: |
@@ -136,7 +136,7 @@ jobs:
               run: |
                   pacman -Syu --noconfirm
                   pacman -S --noconfirm nodejs npm base-devel python make gcc pkgconf \
-                    libx11 libxtst libxext libxrandr gtk3 nss alsa-lib fuse2
+                    libx11 libxtst libxext libxrandr gtk3 nss alsa-lib fuse2 libpng libxi
 
             - name: Install dependencies
               run: |

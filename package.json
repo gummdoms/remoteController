@@ -16,10 +16,10 @@
     "dist:arch:release": "bash distros/archlinux/release.sh",
     "dist:release:upload": "node scripts/upload-release-assets.js",
     "dist:release:upload:ci": "node scripts/upload-ci-assets.js",
-    "postinstall": "electron-builder install-app-deps",
-    "build:native": "cd modules && npm install && cd .. && electron-builder install-app-deps",
+    "postinstall": "node scripts/rebuild-native.js",
+    "build:native": "cd modules && npm install && cd .. && node scripts/rebuild-native.js",
     "rebuild:native": "cd modules && npm run rebuild",
-    "rebuild:electron": "electron-builder install-app-deps",
+    "rebuild:electron": "node scripts/rebuild-native.js",
     "build:sass": "sass static/sass/index.view.scss static/css/index.view.css",
     "watch:sass": "sass static/sass/index.view.scss static/css/index.view.css --watch",
     "test:mouse": "node modules/examples.js",
@@ -109,9 +109,9 @@
     }
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.2.0",
     "electron": "^38.2.2",
     "electron-builder": "^26.0.12",
-    "electron-rebuild": "^3.2.9",
     "sass": "^1.94.0"
   }
 }
