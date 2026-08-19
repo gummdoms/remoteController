@@ -1,4 +1,8 @@
 const { app, BrowserWindow, ipcMain, Tray, Menu, dialog, shell } = require('electron');
+
+// Compatibilidad con compositores Wayland (COSMIC, GNOME Wayland, etc.):
+// usa Wayland nativo cuando esté disponible y cae a X11 automáticamente.
+app.commandLine.appendSwitch('ozone-platform-hint', 'auto');
 const express = require('express');
 const os = require('os');
 const path = require('path');
@@ -24,6 +28,21 @@ const cloudAgent = require('./desktop/cloud-agent');
 const deviceStore = require('./desktop/device-store');
 const sessionManager = require('./desktop/session-manager');
 const { PRODUCTION_CLOUD_URL, INTERCEPTION_RELEASES_URL } = require('./desktop/constants');
+
+// Registra errores no capturados para diagnosticar arranques fallidos
+// (p. ej. en COSMIC/Wayland sin soporte de bandeja del sistema).
+const CRASH_LOG_PATH = path.join(os.tmpdir(), 'remotecontrollers-crash.log');
+process.on('uncaughtException', (error) => {
+    try {
+        fs.appendFileSync(CRASH_LOG_PATH, `[${new Date().toISOString()}] ${error.stack || error.message}\n`);
+    } catch (_) { /* ignorar */ }
+    console.error('Error no capturado (registrado en', CRASH_LOG_PATH + '):', error);
+});
+process.on('unhandledRejection', (reason) => {
+    try {
+        fs.appendFileSync(CRASH_LOG_PATH, `[${new Date().toISOString()}] (rechazo) ${reason && (reason.stack || reason.message) || reason}\n`);
+    } catch (_) { /* ignorar */ }
+});
 
 const isWindows = process.platform === 'win32';
 const isLinux = process.platform === 'linux';
@@ -568,12 +587,17 @@ const createWindow = () => {
     mainWindow.on('unmaximize', emitWindowState);
 
     mainWindow.on('minimize', (event) => {
+        // En Linux sin bandeja visible (p. ej. COSMIC sin soporte SNI), ocultar
+        // la ventana la deja inaccesible; se minimiza de forma normal.
+        if (isLinux && !tray) {
+            return;
+        }
         event.preventDefault();
         mainWindow.hide();
     });
 
     mainWindow.on('close', (event) => {
-        if (!app.quitting) {
+        if (!app.quitting && tray) {
             event.preventDefault();
             mainWindow.hide();
         }
@@ -581,17 +605,24 @@ const createWindow = () => {
     });
 };
 const createTray = () => {
-    tray = new Tray(path.join(__dirname, 'assets', 'tray-icon.png'));
-    const contextMenu = Menu.buildFromTemplate([
-        { label: 'Ver App', click: () => { showMainWindow(); } },
-        { label: 'Salir', click: () => { app.quit(); } }
-    ]);
-    tray.setToolTip('Remote Controller');
-    tray.setContextMenu(contextMenu);
+    try {
+        tray = new Tray(path.join(__dirname, 'assets', 'tray-icon.png'));
+        const contextMenu = Menu.buildFromTemplate([
+            { label: 'Ver App', click: () => { showMainWindow(); } },
+            { label: 'Salir', click: () => { app.quit(); } }
+        ]);
+        tray.setToolTip('Remote Controller');
+        tray.setContextMenu(contextMenu);
 
-    tray.on('click', () => {
-        showMainWindow();
-    });
+        tray.on('click', () => {
+            showMainWindow();
+        });
+    } catch (error) {
+        // En COSMIC/Wayland la bandeja puede no estar disponible (SNI/libappindicator).
+        // No debe impedir que la aplicación abra su ventana.
+        console.error('⚠️ No se pudo crear la bandeja del sistema:', error.message);
+        tray = null;
+    }
 };
 
 if (hasSingleInstanceLock) {

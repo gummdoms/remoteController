@@ -5,5 +5,7 @@ Comment=Control remoto seguro de tu PC (BJR Software)
 Exec=remotecontrollers
 Icon=remotecontrollers
 Terminal=false
+StartupNotify=true
+X-GNOME-UsesNotifications=true
 Categories=Utility;Network;
 Keywords=remote;control;desktop;bjrsoftware;

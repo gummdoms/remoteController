@@ -266,6 +266,39 @@ Ambos valores deben coincidir.
 
 ## Solución de problemas
 
+### La app no abre en COSMIC (Wayland)
+
+COSMIC es un compositor Wayland. Si la ventana no aparece al lanzar desde el menú, revisa el log del launcher:
+
+```bash
+cat ~/.cache/remotecontrollers/launcher.log
+```
+
+El launcher (`remotecontrollers.sh`) ya resuelve automáticamente los fallos más comunes:
+
+| Síntoma | Causa | Solución automática |
+|---------|-------|---------------------|
+| `dlopen(): error loading libfuse.so.2` | Falta `fuse2` para montar el AppImage | Extrae y ejecuta el AppImage (`APPIMAGE_EXTRACT_AND_RUN=1`) |
+| `setuid_sandbox_host.cc: The SUID sandbox helper...` | Sandbox de Chromium bloqueado (AppArmor/namespaces) | Reintenta con `--no-sandbox` |
+| App corre pero sin ventana visible | Bandeja del sistema sin soporte SNI | La ventana ya no depende de la bandeja (se ignora el error) |
+
+Si instalaste el paquete con una versión anterior, actualiza y reinstala:
+
+```bash
+sudo pacman -Syu
+sudo pacman -S remotecontrollers-bin
+```
+
+O prueba el AppImage directamente desde terminal para ver el error real:
+
+```bash
+remotecontrollers
+# o si sale del AppImage directo:
+APPIMAGE_EXTRACT_AND_RUN=1 "/opt/remotecontrollers/remotecontrollers.AppImage" --ozone-platform-hint=auto --no-sandbox
+```
+
+Si la app abre pero el **mouse/teclado remoto no responde en Wayland**, consulta la sección [Mouse / teclado con latencia](#mouse--teclado-con-latencia) y activa el *Modo Wayland experimental* en la pestaña de servicios, o usa una sesión X11.
+
 ### `pacman -Sy` no muestra `bjrsoftware`
 
 Falta el bloque `[bjrsoftware]` en `/etc/pacman.conf`. Ver [Arch Linux](#arch-linux).

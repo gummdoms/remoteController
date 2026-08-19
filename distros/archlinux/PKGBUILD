@@ -1,6 +1,6 @@
 pkgname=remotecontrollers-bin
 pkgver=1.0.5
-pkgrel=1
+pkgrel=2
 pkgdesc="Control remoto seguro de tu PC desde la web (BJR Software)"
 arch=('x86_64')
 url="https://remote-controller.bjrsoftware.uk/"
@@ -15,6 +15,8 @@ depends=(
   'gtk3'
   'nss'
   'alsa-lib'
+  'fuse2'
+  'libappindicator-gtk3'
 )
 optdepends=(
   'pipewire: control de volumen con wpctl'
