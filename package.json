@@ -45,6 +45,7 @@
     "appId": "com.bjrsoftware.remotecontrollers",
     "productName": "Remote Controllers",
     "copyright": "Copyright © 2024-2026 BJR Software",
+    "npmRebuild": false,
     "win": {
       "icon": "assets/icon.ico",
       "legalTrademarks": "BJRSOFTWARE",

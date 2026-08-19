@@ -19,9 +19,9 @@ const isWindows = process.platform === 'win32';
 const rootDir = path.join(__dirname, '..');
 const WIN_ONLY_MODULES = ['@hensm/ddcci', 'node-interception'];
 
-function run(command) {
+function run(command, env) {
     console.log(`[rebuild-native] ${command}`);
-    execSync(command, { stdio: 'inherit', shell: true });
+    execSync(command, { stdio: 'inherit', shell: true, cwd: rootDir, env: env || process.env });
 }
 
 try {
@@ -38,8 +38,32 @@ try {
         }
 
         // 2) Reconstruir robotjs para la versión de Electron en uso.
-        const robotjsDir = path.join(rootDir, 'node_modules', 'robotjs');
+        //    robotjs 0.6.0 falla con glibc moderna (strdup no se declara sin _GNU_SOURCE)
+        //    y node-gyp ignora CFLAGS del entorno; se parchea su binding.gyp.
+        let robotjsDir = path.join(rootDir, 'node_modules', 'robotjs');
+        if (!fs.existsSync(robotjsDir)) {
+            console.log('[rebuild-native] robotjs no instalado; instalándolo sin scripts para poder reconstruirlo...');
+            try {
+                run('npm install --no-save --ignore-scripts robotjs@0.6.0');
+                robotjsDir = path.join(rootDir, 'node_modules', 'robotjs');
+            } catch (error) {
+                console.warn('[rebuild-native] no se pudo instalar robotjs:', error.message);
+            }
+        }
+
         if (fs.existsSync(robotjsDir)) {
+            // Parche: robotjs/src/xdisplay.c usa strdup() sin incluir <string.h>,
+            // lo que rompe la compilación con glibc/gcc modernos.
+            const xdisplayPath = path.join(robotjsDir, 'src', 'xdisplay.c');
+            if (fs.existsSync(xdisplayPath)) {
+                let src = fs.readFileSync(xdisplayPath, 'utf8');
+                if (!src.includes('#include <string.h>')) {
+                    src = src.replace('#include "xdisplay.h"', '#include "xdisplay.h"\n#include <string.h>');
+                    fs.writeFileSync(xdisplayPath, src);
+                    console.log('[rebuild-native] xdisplay.c de robotjs parcheado (include <string.h>).');
+                }
+            }
+
             const electronRebuildBin = path.join(rootDir, 'node_modules', '.bin', 'electron-rebuild');
             if (fs.existsSync(electronRebuildBin)) {
                 run(`"${electronRebuildBin}" -f -o robotjs`);
@@ -47,7 +71,7 @@ try {
                 console.warn('[rebuild-native] @electron/rebuild no disponible; robotjs se usará con su binario de Node.js.');
             }
         } else {
-            console.log('[rebuild-native] robotjs no instalado en esta plataforma; se omite el rebuild.');
+            console.log('[rebuild-native] robotjs no disponible en esta plataforma; se omite el rebuild.');
         }
     }
 } catch (error) {
