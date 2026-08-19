@@ -136,7 +136,7 @@ jobs:
               run: |
                   pacman -Syu --noconfirm
                   pacman -S --noconfirm nodejs npm base-devel python make gcc pkgconf \
-                    libx11 libxtst libxext libxrandr gtk3 nss alsa-lib fuse2 libpng libxi
+                    libx11 libxtst libxext libxrandr gtk3 nss alsa-lib fuse2 libpng libxi libappindicator-gtk3
 
             - name: Install dependencies
               run: |
