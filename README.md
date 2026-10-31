@@ -293,10 +293,14 @@ Copia `.env.example` a `.env` (o reutiliza el de `remoteControllerWeb`):
 
 ```env
 DATA_LAKE_URL=https://datalake.dambra-os.com
+DATA_LAKE_UPLOAD_URL=            # opcional: host sin Cloudflare para >100 MB
 DATA_LAKE_USER=tu_usuario
 DATA_LAKE_PASSWORD=tu_password
 DATA_LAKE_STORAGE_PATH=public/remote-controller
 ```
+
+`DATA_LAKE_URL` se usa para las URLs públicas. `DATA_LAKE_UPLOAD_URL` se usa
+solo para **subir** (útil si el binario supera el límite de Cloudflare).
 
 ### Flujo Arch Linux (pacman)
 
@@ -395,6 +399,34 @@ APPIMAGE_EXTRACT_AND_RUN=1 "/opt/remotecontrollers/remotecontrollers.AppImage" -
 ```
 
 Si la app abre pero el **mouse/teclado remoto no responde en Wayland**, consulta la sección [Mouse / teclado con latencia](#mouse--teclado-con-latencia) y activa el *Modo Wayland experimental* en la pestaña de servicios, o usa una sesión X11.
+
+### `413 Payload Too Large` al subir releases (Cloudflare)
+
+Cloudflare limita el **cuerpo de cada petición a 100 MB** en planes Free/Pro.
+El instalador `.exe` y el `.pkg.tar.zst` suelen superarlo, así que el paso
+«Upload assets to data lake» falla con `413` y el repositorio pacman no se
+publica.
+
+Soluciones (de más simple a más compleja):
+
+1. **Subdominio DNS-only** (recomendado): crea `upload.datalake.dambra-os.com`
+   apuntando directo al servidor, **sin el proxy naranja** de Cloudflare, con
+   certificado Let's Encrypt. Luego define el secret `DATA_LAKE_UPLOAD_URL` con
+   ese host. Las descargas siguen por Cloudflare.
+2. **Cloudflare R2**: subir los binarios pesados con la API S3 (admite hasta
+   5 GiB por PUT) y servir el repositorio desde un dominio propio.
+3. **Tailscale** (configurado): el runner entra en la tailnet con
+   `tailscale/github-action` (`--ephemeral`) usando el secret `TS_AUTHKEY`, y el
+   workflow pone solo `DATA_LAKE_UPLOAD_URL=http://100.105.212.100:30001`
+   (servidor `server-prod`). Las descargas siguen por Cloudflare; solo la subida
+   va por la tailnet.
+
+   Comprobado: 105 MB subidos en ~7 s por esa IP, sin `413`. No hace falta
+   exponer el origen a Internet.
+
+Mientras no se corrija el host, el workflow sigue subiendo el resto de archivos
+(no aborta todo) y omite el índice `bjrsoftware.db` si el `.pkg.tar.zst` falló,
+para no dejar un repositorio roto.
 
 ### `pacman -Sy` no muestra `bjrsoftware`
 

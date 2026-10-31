@@ -2,6 +2,28 @@ const path = require('path');
 
 const STORAGE_ROOT = String(process.env.DATA_LAKE_STORAGE_PATH || 'public/remote-controller').replace(/\/+$/, '');
 
+// Cloudflare corta a 100 MB por petición; por un host directo (Tailscale) no.
+const REQUEST_TIMEOUT_MS = Number(process.env.DATA_LAKE_TIMEOUT_MS || 15 * 60 * 1000);
+
+/**
+ * fetch con timeout: sin esto, un host inalcanzable (p. ej. Tailscale caído)
+ * deja el job colgado hasta el timeout del runner.
+ */
+async function fetchWithTimeout(url, options = {}, timeoutMs = REQUEST_TIMEOUT_MS) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        return await fetch(url, { ...options, signal: controller.signal });
+    } catch (error) {
+        if (error.name === 'AbortError') {
+            throw new Error(`Tiempo de espera agotado (${Math.round(timeoutMs / 1000)} s) al contactar ${url}`);
+        }
+        throw new Error(`No se pudo contactar ${url}: ${error.message}`);
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
 let cachedToken = null;
 let tokenExpiresAt = 0;
 
@@ -9,8 +31,17 @@ function getBaseUrl() {
     return String(process.env.DATA_LAKE_URL || '').replace(/\/+$/, '');
 }
 
+/**
+ * Host que se usa para SUBIR archivos. Puede ser distinto del público para
+ * esquivar el límite de 100 MB por petición de Cloudflare (plan Free/Pro):
+ * por ejemplo un subdominio sin proxy, la IP de Tailscale o un túnel SSH.
+ */
+function getUploadBaseUrl() {
+    return String(process.env.DATA_LAKE_UPLOAD_URL || process.env.DATA_LAKE_URL || '').replace(/\/+$/, '');
+}
+
 function isConfigured() {
-    return Boolean(getBaseUrl() && process.env.DATA_LAKE_USER && process.env.DATA_LAKE_PASSWORD);
+    return Boolean(getUploadBaseUrl() && process.env.DATA_LAKE_USER && process.env.DATA_LAKE_PASSWORD);
 }
 
 function assertConfigured() {
@@ -21,14 +52,14 @@ function assertConfigured() {
 
 async function login() {
     assertConfigured();
-    const response = await fetch(`${getBaseUrl()}/login`, {
+    const response = await fetchWithTimeout(`${getUploadBaseUrl()}/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
             username: process.env.DATA_LAKE_USER,
             password: process.env.DATA_LAKE_PASSWORD
         })
-    });
+    }, 60_000);
 
     if (!response.ok) {
         const text = await response.text().catch(() => '');
@@ -82,11 +113,19 @@ async function uploadFile(filename, buffer, relativePath = '', mimeType = 'appli
     form.append('filename', filename);
     form.append('file', new Blob([buffer], { type: mimeType }), filename);
 
-    const response = await fetch(`${getBaseUrl()}/data`, {
+    const response = await fetchWithTimeout(`${getUploadBaseUrl()}/data`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: form
     });
+
+    if (response.status === 413) {
+        throw new Error(
+            `413 Payload Too Large al subir ${filename}. Cloudflare limita el cuerpo de la petición a 100 MB ` +
+            '(planes Free/Pro). Define DATA_LAKE_UPLOAD_URL con un hostname SIN proxy de Cloudflare ' +
+            '(subdominio con DNS-only, IP de Tailscale o túnel SSH) o sube los binarios a Cloudflare R2.'
+        );
+    }
 
     if (!response.ok) {
         const text = await response.text().catch(() => '');
@@ -123,10 +162,10 @@ async function deleteFile(filename, relativePath = '') {
         filename: safeName
     });
 
-    const response = await fetch(`${getBaseUrl()}/data/?${params.toString()}`, {
+    const response = await fetchWithTimeout(`${getUploadBaseUrl()}/data/?${params.toString()}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
-    });
+    }, 60_000);
 
     if (response.status === 404) {
         return { ok: true, missing: true };
@@ -148,5 +187,7 @@ module.exports = {
     uploadFile,
     uploadFileFromDisk,
     deleteFile,
-    normalizeStoragePath
+    normalizeStoragePath,
+    getBaseUrl,
+    getUploadBaseUrl
 };

@@ -267,8 +267,10 @@ jobs:
               id: lake
               env:
                   DATA_LAKE_URL: ${{ secrets.DATA_LAKE_URL }}
+                  DATA_LAKE_UPLOAD_URL: ${{ secrets.DATA_LAKE_UPLOAD_URL }}
                   DATA_LAKE_USER: ${{ secrets.DATA_LAKE_USER }}
                   DATA_LAKE_PASSWORD: ${{ secrets.DATA_LAKE_PASSWORD }}
+                  TS_AUTHKEY: ${{ secrets.TS_AUTHKEY }}
               run: |
                   if [[ -n "${DATA_LAKE_URL}" && -n "${DATA_LAKE_USER}" && -n "${DATA_LAKE_PASSWORD}" ]]; then
                     echo "configured=true" >> "$GITHUB_OUTPUT"
@@ -276,6 +278,29 @@ jobs:
                     echo "configured=false" >> "$GITHUB_OUTPUT"
                     echo "::warning title=Data lake::Faltan los secrets DATA_LAKE_URL / DATA_LAKE_USER / DATA_LAKE_PASSWORD. El repositorio pacman NO se publicará (seguirá dando 404)."
                   fi
+
+                  if [[ -n "${TS_AUTHKEY}" ]]; then
+                    echo "tailscale=true" >> "$GITHUB_OUTPUT"
+                    echo "::notice::El runner se unirá a la tailnet para subir al data lake (sin Cloudflare)."
+                  else
+                    echo "tailscale=false" >> "$GITHUB_OUTPUT"
+                  fi
+
+                  # Host de subida: 1) secret explícito, 2) IP de Tailscale, 3) el público.
+                  if [[ -n "${DATA_LAKE_UPLOAD_URL}" ]]; then
+                    echo "DATA_LAKE_UPLOAD_URL=${DATA_LAKE_UPLOAD_URL}" >> "$GITHUB_ENV"
+                  elif [[ -n "${TS_AUTHKEY}" ]]; then
+                    echo "DATA_LAKE_UPLOAD_URL=http://100.105.212.100:30001" >> "$GITHUB_ENV"
+                  fi
+
+            - name: Join Tailscale for data lake upload
+              if: steps.lake.outputs.configured == 'true' && steps.lake.outputs.tailscale == 'true'
+              continue-on-error: true
+              uses: tailscale/github-action@v2
+              with:
+                  # Nodo efímero: desaparece de la tailnet al terminar el job.
+                  authkey: ${{ secrets.TS_AUTHKEY }}
+                  args: --ephemeral --hostname=rc-ci-${{ github.run_id }}
 
             - name: Publish GitHub Release
               uses: softprops/action-gh-release@v2
@@ -299,6 +324,8 @@ jobs:
               if: steps.lake.outputs.configured == 'true' && (github.event_name != 'workflow_dispatch' || inputs.publish_datalake)
               env:
                   DATA_LAKE_URL: ${{ secrets.DATA_LAKE_URL }}
+                  # DATA_LAKE_UPLOAD_URL se define en el paso anterior ($GITHUB_ENV):
+                  # secret explícito o, si hay TS_AUTHKEY, la IP de Tailscale.
                   DATA_LAKE_USER: ${{ secrets.DATA_LAKE_USER }}
                   DATA_LAKE_PASSWORD: ${{ secrets.DATA_LAKE_PASSWORD }}
                   DATA_LAKE_STORAGE_PATH: ${{ secrets.DATA_LAKE_STORAGE_PATH }}
