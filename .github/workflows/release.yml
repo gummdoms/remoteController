@@ -136,6 +136,8 @@ jobs:
         steps:
             - name: Install Arch dependencies
               run: |
+                  pacman-key --init
+                  pacman-key --populate archlinux
                   pacman -Syu --noconfirm --disable-download-timeout
                   pacman -S --noconfirm --needed base-devel git nodejs npm sudo
 
@@ -176,7 +178,6 @@ jobs:
             always() &&
             needs.build-windows.result == 'success' &&
             needs.build-linux-appimage.result == 'success' &&
-            needs.build-arch-package.result == 'success' &&
             (github.event_name != 'workflow_dispatch' || inputs.publish_github_release)
         needs: [build-windows, build-linux-appimage, build-arch-package]
         runs-on: ubuntu-latest
@@ -196,6 +197,13 @@ jobs:
               uses: actions/download-artifact@v4
               with:
                   path: release-assets
+
+            - name: Download Arch artifact
+              if: needs.build-arch-package.result == 'success'
+              uses: actions/download-artifact@v4
+              with:
+                  name: archlinux-package
+                  path: release-assets/archlinux-package
 
             - name: Prepare release assets
               run: |
@@ -306,7 +314,7 @@ jobs:
                   BASE="${RELEASES_BASE:-https://datalake.dambra-os.com/public/remote-controller/releases}"
                   BASE="${BASE%/}"
 
-                  PKG_FILE=$(basename "$(ls release-assets/arch/*.pkg.tar.zst | head -1)")
+                  PKG_FILE=$(ls release-assets/arch/*.pkg.tar.zst 2>/dev/null | head -1 | xargs -r basename)
                   {
                     echo "### Repositorio pacman"
                     echo ""
@@ -318,7 +326,17 @@ jobs:
                     if [[ "$CODE" != "200" ]]; then
                       echo "::warning title=Data lake::$url respondió $CODE"
                     fi
-                  }
+                  done
+
+            - name: Warn if Arch package is missing
+              if: needs.build-arch-package.result != 'success'
+              run: |
+                  echo "::warning title=Repositorio pacman::No se generó el paquete Arch; el repositorio [bjrsoftware] no se actualizará en esta ejecución."
+                  {
+                    echo "### Repositorio pacman"
+                    echo ""
+                    echo "⚠️ El paquete Arch falló; los usuarios de Arch no recibirán actualización."
+                  } >> "$GITHUB_STEP_SUMMARY"
 
     # Aviso explícito si algún artefacto no se pudo construir.
     notify-failure:
