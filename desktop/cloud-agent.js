@@ -8,12 +8,20 @@ const {
 const INTERNAL_API_HOST = process.env.INTERNAL_API_HOST || '127.0.0.1';
 const INTERNAL_API_PORT = Number(process.env.INTERNAL_API_PORT || 4800);
 const RECONNECT_DELAY_MS = Number(process.env.CLOUD_RECONNECT_MS || 5000);
+const MAX_RECONNECT_DELAY_MS = Number(process.env.CLOUD_RECONNECT_MAX_MS || 60000);
+const HEARTBEAT_INTERVAL_MS = Number(process.env.CLOUD_HEARTBEAT_MS || 25000);
+const STALE_CONNECTION_MS = HEARTBEAT_INTERVAL_MS * 3;
 
 let ws = null;
 let reconnectTimer = null;
 let heartbeatTimer = null;
 let shouldRun = false;
 let statusListeners = [];
+let reconnectAttempts = 0;
+let lastMessageAt = 0;
+let authRetryInFlight = false;
+let lastAuthAttemptAt = 0;
+let handlers = {};
 
 function getWsUrl(serverUrl) {
     const base = String(serverUrl || '').replace(/\/$/, '');
@@ -140,17 +148,26 @@ function scheduleReconnect() {
     if (!shouldRun || reconnectTimer) {
         return;
     }
+    // Backoff exponencial con jitter: evita martillear el servidor cuando la
+    // red cae o el equipo acaba de despertar de suspensión.
+    const base = Math.min(MAX_RECONNECT_DELAY_MS, RECONNECT_DELAY_MS * Math.pow(2, Math.min(reconnectAttempts, 5)));
+    const delay = Math.round(base + Math.random() * base * 0.25);
+    reconnectAttempts += 1;
+
     reconnectTimer = setTimeout(() => {
         reconnectTimer = null;
         connectCloudAgent().catch((error) => {
             console.error('Reintento de conexión cloud falló:', error.message);
             scheduleReconnect();
         });
-    }, RECONNECT_DELAY_MS);
+    }, delay);
 }
 
 async function handleWsMessage(message) {
+    lastMessageAt = Date.now();
+
     if (message.type === 'connected') {
+        reconnectAttempts = 0;
         saveConnectionStatus('connected');
         notifyStatus(buildStatus({ event: 'connected' }));
         return;
@@ -158,6 +175,9 @@ async function handleWsMessage(message) {
 
     if (message.type === 'error') {
         notifyStatus(buildStatus({ event: 'error', error: message.message }));
+        if (message.code === 'UNAUTHORIZED' || message.status === 401) {
+            handleAuthFailure();
+        }
         return;
     }
 
@@ -204,6 +224,8 @@ async function handleWsMessage(message) {
 function bindSocketHandlers(socket) {
     socket.on('open', () => {
         clearTimers();
+        reconnectAttempts = 0;
+        lastMessageAt = Date.now();
         const config = getCloudConfig();
 
         if (!config.deviceToken) {
@@ -216,14 +238,34 @@ function bindSocketHandlers(socket) {
         sendWs({ type: 'device_auth', token: config.deviceToken });
 
         heartbeatTimer = setInterval(() => {
+            if (Date.now() - lastMessageAt > STALE_CONNECTION_MS) {
+                // Conexión zombi (red cambiada, suspensión, NAT): se recicla.
+                console.warn('WebSocket cloud sin actividad; reconectando.');
+                try {
+                    socket.terminate();
+                } catch (error) {
+                    // Ignorar.
+                }
+                return;
+            }
             sendWs({ type: 'heartbeat' });
-        }, 25_000);
+            try {
+                socket.ping();
+            } catch (error) {
+                // Ignorar.
+            }
+        }, HEARTBEAT_INTERVAL_MS);
 
         saveConnectionStatus('connecting');
         notifyStatus(buildStatus({ event: 'socket_open' }));
     });
 
+    socket.on('pong', () => {
+        lastMessageAt = Date.now();
+    });
+
     socket.on('message', (raw) => {
+        lastMessageAt = Date.now();
         try {
             const message = JSON.parse(String(raw));
             handleWsMessage(message).catch((error) => {
@@ -234,11 +276,28 @@ function bindSocketHandlers(socket) {
         }
     });
 
-    socket.on('close', () => {
+    socket.on('close', (code) => {
+        // Socket antiguo ya reemplazado por una conexión nueva: su cierre no
+        // debe afectar a la conexión activa.
+        if (socket !== ws) {
+            return;
+        }
         ws = null;
         clearTimers();
         saveConnectionStatus('disconnected');
-        notifyStatus(buildStatus({ event: 'socket_close' }));
+        notifyStatus(buildStatus({ event: 'socket_close', code }));
+
+        // 4401/4403: el token del dispositivo ya no es válido. Se intenta
+        // renovar la sesión y volver a registrar el equipo sin molestar al
+        // usuario.
+        if (code === 4401 || code === 4403) {
+            handleAuthFailure().then((reconnected) => {
+                if (!reconnected) {
+                    scheduleReconnect();
+                }
+            });
+            return;
+        }
         scheduleReconnect();
     });
 
@@ -247,8 +306,40 @@ function bindSocketHandlers(socket) {
     });
 }
 
+async function handleAuthFailure() {
+    if (authRetryInFlight || typeof handlers.onUnauthorized !== 'function') {
+        return false;
+    }
+    // Evita bucles de re-registro si el servidor sigue rechazando el token.
+    if (Date.now() - lastAuthAttemptAt < 60_000) {
+        console.warn('Renovación de autenticación omitida (intento reciente).');
+        return false;
+    }
+    lastAuthAttemptAt = Date.now();
+    authRetryInFlight = true;
+    try {
+        const result = await handlers.onUnauthorized();
+        if (result && result.ok) {
+            reconnectAttempts = 0;
+            await connectCloudAgent();
+            return true;
+        }
+        return false;
+    } catch (error) {
+        console.error('No se pudo renovar la autenticación cloud:', error.message);
+        return false;
+    } finally {
+        authRetryInFlight = false;
+    }
+}
+
 async function connectCloudAgent() {
     if (!shouldRun) {
+        return buildStatus();
+    }
+
+    // Ya hay un intento en curso: no se duplica la conexión.
+    if (ws && ws.readyState === WebSocket.CONNECTING) {
         return buildStatus();
     }
 
@@ -273,12 +364,18 @@ async function connectCloudAgent() {
     });
 }
 
-function startCloudAgent() {
+function startCloudAgent({ force = false } = {}) {
     const config = getCloudConfig();
     if (!config.deviceToken) {
         return Promise.resolve(buildStatus({ error: 'Sin token de dispositivo.' }));
     }
     shouldRun = true;
+
+    if (!force && ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+        return Promise.resolve(buildStatus());
+    }
+
+    reconnectAttempts = 0;
     return connectCloudAgent();
 }
 
@@ -304,6 +401,14 @@ function onCloudStatus(listener) {
     };
 }
 
+/**
+ * Registra los callbacks que permiten recuperar la sesión cuando el servidor
+ * rechaza el token del dispositivo.
+ */
+function setAuthHandlers(nextHandlers = {}) {
+    handlers = { ...handlers, ...nextHandlers };
+}
+
 function getCloudStatus() {
     return buildStatus();
 }
@@ -313,5 +418,6 @@ module.exports = {
     stopCloudAgent,
     connectCloudAgent,
     onCloudStatus,
+    setAuthHandlers,
     getCloudStatus
 };

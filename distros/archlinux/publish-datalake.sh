@@ -6,7 +6,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
 REPO_DIR="$DIST_DIR/datalake-repo"
 UPLOAD_DIR="$DIST_DIR/datalake-upload"
-RELEASES_BASE="${RELEASES_BASE:-https://datalake.dambra-os.com/public/remote-controller/releases/arch/x86_64}"
+DEFAULT_RELEASES_BASE="$(node -p "require('$ROOT_DIR/package.json').config.releasesUrl")"
+RELEASES_BASE="${RELEASES_BASE:-$DEFAULT_RELEASES_BASE}"
 VERSION="$(node -p "require('$ROOT_DIR/package.json').version")"
 PKGREL="$(awk -F= '/^pkgrel=/{print $2; exit}' "$ROOT_DIR/distros/archlinux/PKGBUILD")"
 PKG="remotecontrollers-bin-${VERSION}-${PKGREL}-x86_64.pkg.tar.zst"
@@ -21,14 +22,20 @@ if [[ ! -f "$PKG_PATH" ]]; then
 fi
 
 mkdir -p "$REPO_DIR"
+
+# El repositorio pacman solo debe publicar la versión actual: al acumular
+# varias versiones, repo-add conserva entradas antiguas y pacman puede bajar
+# un paquete que ya no coincide con el índice.
+find "$REPO_DIR" -maxdepth 1 -type f -name '*.pkg.tar.zst' ! -name "$PKG" -delete
 cp -f "$PKG_PATH" "$REPO_DIR/"
 
 (
   cd "$REPO_DIR"
-  rm -f bjrsoftware.db
-  repo-add "$REPO_DB" "$PKG"
+  rm -f bjrsoftware.db bjrsoftware.files bjrsoftware.db.tar.zst bjrsoftware.files.tar.zst
+  repo-add --remove --nocolor "$REPO_DB" "$PKG"
 )
 
+rm -rf "$UPLOAD_DIR"
 mkdir -p "$UPLOAD_DIR"
 cp -f "$REPO_DIR/$PKG" "$UPLOAD_DIR/"
 cp -f "$REPO_DIR/$REPO_DB" "$UPLOAD_DIR/"

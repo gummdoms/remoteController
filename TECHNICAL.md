@@ -455,6 +455,99 @@ npx electron-rebuild
 
 ---
 
-**Última actualización:** Octubre 2025  
+## 🐧 Backends de entrada en Linux (X11 y Wayland)
+
+El módulo nativo `mouse_controller.node` elige el backend en tiempo de ejecución:
+
+| Sesión | Backend | Detalle |
+|--------|---------|---------|
+| X11 | `XTest` (`libXtst`) | Inyección clásica sobre el servidor X. |
+| Wayland (Hyprland, Sway, KDE, GNOME, COSMIC) | `uinput` | Crea un dispositivo virtual (`/dev/uinput`) y emite eventos `EV_REL` / `EV_KEY`. Funciona con cualquier compositor porque los eventos entran por el kernel. |
+| Sin `DISPLAY` ni acceso a `/dev/uinput` | `none` | Se reporta error 503 en los endpoints de entrada. |
+
+`nativeInput.getInputBackend()` devuelve:
+
+```json
+{ "backend": "uinput", "wayland": true, "uinputReady": true, "error": "" }
+```
+
+### Permisos necesarios para uinput
+
+```bash
+sudo groupadd -f uinput
+sudo usermod -aG input,uinput,video "$USER"
+echo uinput | sudo tee /etc/modules-load.d/uinput.conf
+echo 'KERNEL=="uinput", MODE="0660", GROUP="uinput", OPTIONS+="static_node=uinput"' \
+  | sudo tee /etc/udev/rules.d/99-uinput.rules
+sudo modprobe uinput
+sudo udevadm control --reload-rules && sudo udevadm trigger
+```
+
+Después hay que cerrar sesión y volver a entrar para que los grupos se apliquen.
+La app puede aplicar esto sola desde la interfaz (botón de corrección de permisos,
+usa `pkexec`).
+
+> XTest no sirve en Wayland: solo alcanza a ventanas XWayland. Por eso el
+> módulo detecta `XDG_SESSION_TYPE=wayland` / `WAYLAND_DISPLAY` y se pasa a
+> `uinput` automáticamente.
+
+### Modos de pantalla por compositor
+
+| Compositor | Backend | Comando |
+|------------|---------|---------|
+| Windows | `windows-backend` | `DisplaySwitch.exe` |
+| KDE Plasma (Wayland) | `linux-kscreen` | `kscreen-doctor` |
+| Hyprland | `linux-hyprland` | `hyprctl monitors -j` / `hyprctl keyword monitor` |
+| Sway / wlroots | `linux-wlr-randr` | `wlr-randr` |
+| X11 | `linux-xrandr` | `xrandr` |
+
+---
+
+## Dependencias del sistema en Linux
+
+Módulo: `platform/dependencies/linux-deps.js`.
+
+1. Detecta la distro leyendo `/etc/os-release` y el gestor disponible
+   (`pacman`, `apt-get`, `dnf`, `zypper`, `apk`).
+2. Agrupa las herramientas por **funcionalidad**, no por binario: por ejemplo
+   `audio` acepta `wpctl` **o** `pactl`, y `display` elige el binario según la
+   sesión (`hyprctl` → `kscreen-doctor` → `wlr-randr` → `xrandr`).
+3. `installMissing()` genera un script temporal y lo ejecuta con
+   `pkexec /bin/bash`, usando los nombres de paquete de cada distro.
+4. El resultado se expone por IPC (`service:getDependencies`,
+   `service:installDependencies`, `service:setAutoInstallDeps`) y la UI lo
+   muestra en la tarjeta «Componentes del sistema».
+
+En Arch el paquete **no necesita ese instalador** para las dependencias base:
+van declaradas en `depends` y pacman las instala. El instalador cubre las
+herramientas específicas del escritorio y el caso AppImage en otras distros.
+
+El paquete pacman **desempaqueta el AppImage** en `prepare()` con
+`--appimage-extract`, así que no depende de `fuse2` ni monta squashfs.
+
+---
+
+## Persistencia de sesión
+
+La sesión cloud se guarda en `userData/auth-session.json` con permisos `0600`
+y escritura atómica. Reglas de diseño:
+
+1. **Nunca se cierra automáticamente.** Solo `logout()` (acción explícita del
+   usuario) borra el archivo.
+2. Si el token caduca se intenta renovar con `POST /api/auth/refresh`
+   (refresh token). Si el servidor no expone ese endpoint, se conserva la
+   sesión y se marca `expired: true` para que la interfaz pida re-login.
+3. Los fallos de red (`status = 0` o `5xx`) marcan `offline: true` y se
+   reintentan en el siguiente latido; nunca se borran credenciales.
+4. `sessionManager.startKeepAlive()` ejecuta un latido cada 10 minutos
+   (`SESSION_KEEPALIVE_MS`) que renueva el token y reconecta el agente cloud.
+5. El WebSocket usa **backoff exponencial con jitter** y detección de
+   conexiones zombis (`ping`/`pong` + marca de último mensaje). Si el servidor
+   cierra con `4401`, `cloudAgent` llama a `sessionManager.handleUnauthorized()`,
+   que renueva la sesión y vuelve a registrar el equipo sin pedir contraseña.
+
+---
+
+**Última actualización:** Octubre 2026  
 **Versión del módulo:** 1.0.0  
 **Autor:** Damar Narváez Martínez

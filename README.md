@@ -62,6 +62,11 @@ https://datalake.dambra-os.com/public/file?path=public/remote-controller/release
 
 **Opción A — Repositorio pacman (recomendado)**
 
+> El repositorio `[bjrsoftware]` solo responde cuando el mantenedor ha publicado
+> el índice con `npm run dist:arch:release` (o cuando el workflow de CI ha
+> subido los artefactos al data lake). Si `pacman -Sy` da *404*, usa la
+> **Opción B** o publica el repositorio antes.
+
 **1. Añade el repositorio** (una sola vez):
 
 ```bash
@@ -87,6 +92,14 @@ sudo pacman -S remotecontrollers-bin
 ```bash
 remotecontrollers
 ```
+
+El paquete instala automáticamente con pacman las librerías de Electron y las
+herramientas comunes (`ddcutil`, `polkit`, `xorg-xrandr`). El AppImage va
+desempaquetado en `/opt/remotecontrollers`, así que **no necesitas `libfuse2`**.
+
+Las herramientas que dependen de tu escritorio (`kscreen` en KDE, `wlr-randr` en
+Sway, `pipewire` para audio) se instalan desde la propia app: pestaña de
+servicios → **Instalar dependencias faltantes**.
 
 **4. Actualiza** cuando haya una versión nueva:
 
@@ -147,6 +160,65 @@ sudo usermod -aG video,input "$USER"
 ```
 
 Cierra sesión y vuelve a entrar para aplicar los grupos.
+
+---
+
+## Wayland y Hyprland
+
+El mouse y el teclado remotos funcionan **con cualquier compositor Wayland**
+(Hyprland, Sway, KDE Plasma, GNOME, COSMIC). El módulo nativo detecta la sesión
+y crea un dispositivo virtual con `uinput`, porque XTest solo alcanza a
+ventanas XWayland.
+
+Requisito único: acceso a `/dev/uinput` (la app lo diagnostica en la pestaña de
+servicios y puede corregirlo con `pkexec`):
+
+```bash
+sudo groupadd -f uinput
+sudo usermod -aG input,uinput,video "$USER"
+echo uinput | sudo tee /etc/modules-load.d/uinput.conf
+echo 'KERNEL=="uinput", MODE="0660", GROUP="uinput", OPTIONS+="static_node=uinput"' \
+  | sudo tee /etc/udev/rules.d/99-uinput.rules
+sudo modprobe uinput
+sudo udevadm control --reload-rules && sudo udevadm trigger
+# Cierra sesión y vuelve a entrar
+```
+
+Control de pantallas por compositor:
+
+| Sesión | Herramienta | Paquete |
+|--------|-------------|---------|
+| Hyprland | `hyprctl` | ya viene con Hyprland |
+| KDE Plasma Wayland | `kscreen-doctor` | `kscreen` |
+| Sway / wlroots | `wlr-randr` | `wlr-randr` |
+| X11 | `xrandr` | `xorg-xrandr` |
+
+La app muestra el backend de entrada activo (`uinput` o `XTest`) en la pestaña
+de servicios.
+
+---
+
+## Dependencias del sistema (instalación automática)
+
+La app comprueba al iniciar qué herramientas del sistema tiene disponibles y
+puede instalarlas sola, según la distribución y el escritorio:
+
+| Función | Herramienta | Arch | Debian/Ubuntu | Fedora | openSUSE |
+|---------|-------------|------|---------------|--------|----------|
+| Volumen | `wpctl` / `pactl` | `pipewire` | `pipewire-bin` | `wireplumber` | `pipewire-tools` |
+| Brillo/contraste | `ddcutil` | `ddcutil` | `ddcutil` | `ddcutil` | `ddcutil` |
+| Pantallas (KDE) | `kscreen-doctor` | `kscreen` | `kscreen` | `kscreen` | `kscreen6` |
+| Pantallas (Sway) | `wlr-randr` | `wlr-randr` | `wlr-randr` | `wlr-randr` | `wlr-randr` |
+| Pantallas (X11) | `xrandr` | `xorg-xrandr` | `x11-xserver-utils` | `xrandr` | `xrandr` |
+| Permisos | `pkexec` | `polkit` | `pkexec` | `polkit` | `polkit` |
+
+- En **Arch** el paquete declara las dependencias en `depends`, así que pacman las
+  instala al instalar el paquete.
+- En **AppImage** o en otras distribuciones, la app detecta el gestor
+  (`pacman`, `apt`, `dnf`, `zypper`, `apk`) y ofrece **«Instalar dependencias
+  faltantes»** con un diálogo `pkexec`. También puedes activar
+  **«Instalar dependencias al iniciar»** para que se haga solo.
+- Si no hay `pkexec`, el panel muestra el comando exacto para copiar y pegar.
 
 ---
 
@@ -238,6 +310,25 @@ Esto ejecuta:
 2. `dist:arch:publish` — genera `dist/datalake-upload/` (5 archivos del repo)
 3. `dist:arch:upload` — sube al lago de datos
 
+Puedes ejecutar cada paso por separado:
+
+```bash
+npm run dist:arch:pkg       # solo el paquete .pkg.tar.zst
+npm run dist:arch:publish   # solo el índice bjrsoftware.db
+npm run dist:arch:upload    # solo la subida (requiere .env con DATA_LAKE_*)
+```
+
+El repositorio publicado debe contener **exactamente**:
+
+```text
+remotecontrollers-bin-<version>-<rel>-x86_64.pkg.tar.zst
+bjrsoftware.db      bjrsoftware.files
+bjrsoftware.db.tar.zst   bjrsoftware.files.tar.zst
+```
+
+Si falta `bjrsoftware.db` en la URL del repositorio, `pacman -Sy` falla con
+*404*: significa que el índice nunca se subió (no que el servidor esté mal).
+
 ### Subir todos los artefactos (Windows + Linux + Arch)
 
 Tras compilar localmente o descargar artefactos de CI:
@@ -257,7 +348,12 @@ npm run dist:release:upload
 stat -c%s dist/datalake-upload/remotecontrollers-bin-*-x86_64.pkg.tar.zst
 
 # Tamaño remoto (pacman)
-curl -sI "https://datalake.dambra-os.com/public/remote-controller/releases/arch/x86_64/remotecontrollers-bin-1.0.6-1-x86_64.pkg.tar.zst" | grep -i content-length
+curl -sI "https://datalake.dambra-os.com/public/remote-controller/releases/arch/x86_64/$(ls dist/datalake-upload/*.pkg.tar.zst | xargs basename)" \
+  | grep -i content-length
+
+# Comprobar que el índice del repositorio existe (debe dar 200)
+curl -s -o /dev/null -w "%{http_code}\n" \
+  https://datalake.dambra-os.com/public/remote-controller/releases/arch/x86_64/bjrsoftware.db
 ```
 
 Ambos valores deben coincidir.
@@ -274,12 +370,13 @@ COSMIC es un compositor Wayland. Si la ventana no aparece al lanzar desde el men
 cat ~/.cache/remotecontrollers/launcher.log
 ```
 
-El launcher (`remotecontrollers.sh`) ya resuelve automáticamente los fallos más comunes:
+Con el paquete de Arch (`remotecontrollers-bin`) el AppImage va desempaquetado y
+no se usa FUSE. Si ejecutas el **AppImage suelto** en otra distribución, revisa:
 
-| Síntoma | Causa | Solución automática |
-|---------|-------|---------------------|
-| `dlopen(): error loading libfuse.so.2` | Falta `fuse2` para montar el AppImage | Extrae y ejecuta el AppImage (`APPIMAGE_EXTRACT_AND_RUN=1`) |
-| `setuid_sandbox_host.cc: The SUID sandbox helper...` | Sandbox de Chromium bloqueado (AppArmor/namespaces) | Reintenta con `--no-sandbox` |
+| Síntoma | Causa | Solución |
+|---------|-------|----------|
+| `dlopen(): error loading libfuse.so.2` | Falta `libfuse2` (Ubuntu 22.04+) | Instala `libfuse2`, o ejecuta con `APPIMAGE_EXTRACT_AND_RUN=1` |
+| `setuid_sandbox_host.cc: The SUID sandbox helper...` | Sandbox de Chromium bloqueado (AppArmor/namespaces) | Añade `--no-sandbox` |
 | App corre pero sin ventana visible | Bandeja del sistema sin soporte SNI | La ventana ya no depende de la bandeja (se ignora el error) |
 
 Si instalaste el paquete con una versión anterior, actualiza y reinstala:
@@ -302,6 +399,26 @@ Si la app abre pero el **mouse/teclado remoto no responde en Wayland**, consulta
 ### `pacman -Sy` no muestra `bjrsoftware`
 
 Falta el bloque `[bjrsoftware]` en `/etc/pacman.conf`. Ver [Arch Linux](#arch-linux).
+
+### El paquete Arch no compila (`ERROR: No se pudieron resolver todas las dependencias`)
+
+Es el error típico al ejecutar `makepkg` en un equipo que no tiene instaladas
+las dependencias de *runtime* (por ejemplo `libappindicator-gtk3`). El paquete
+`remotecontrollers-bin` no compila nada, así que el script ya usa
+`makepkg --nodeps`:
+
+```bash
+npm run dist:arch:pkg
+```
+
+Si aparece `makepkg: no se puede ejecutar como root`, ejecuta el comando con tu
+usuario normal (sin `sudo`).
+
+### La sesión se cerraba sola
+
+Ya no ocurre: la sesión se guarda con refresh token y **solo** se borra cuando
+pulsas cerrar sesión. Si hay un corte de red, la app reintenta en segundo plano
+y muestra *«sin conexión, reintentando»* en vez de expulsarte.
 
 ### `suma de verificación` / paquete dañado
 

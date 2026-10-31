@@ -1,7 +1,8 @@
 {
   "name": "remotecontrollers",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "main": "app.js",
+  "desktopName": "remotecontrollers.desktop",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "electron .",
@@ -57,6 +58,16 @@
       "icon": "assets/icon.png",
       "category": "Utility",
       "maintainer": "Damar Narváez Martínez <damar23nnm@gmail.com>",
+      "executableName": "remotecontrollers",
+      "syncDesktopName": true,
+      "desktop": {
+        "entry": {
+          "Name": "Remote Controllers",
+          "Comment": "Control remoto seguro de tu PC (BJR Software)",
+          "StartupWMClass": "remotecontrollers",
+          "X-GNOME-UsesNotifications": "true"
+        }
+      },
       "target": [
         {
           "target": "AppImage",

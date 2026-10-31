@@ -28,7 +28,36 @@ function writeStore(data) {
     if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
     }
-    fs.writeFileSync(storePath, JSON.stringify(data, null, 2), 'utf8');
+
+    // Escritura atómica + permisos 600: el archivo contiene credenciales y no
+    // debe corromperse si el proceso muere a mitad de escritura.
+    const tempPath = `${storePath}.${process.pid}.tmp`;
+    fs.writeFileSync(tempPath, JSON.stringify(data, null, 2), { encoding: 'utf8', mode: 0o600 });
+    fs.renameSync(tempPath, storePath);
+
+    try {
+        fs.chmodSync(storePath, 0o600);
+    } catch (error) {
+        // Algunos sistemas de archivos (FAT/red) no permiten aplicar permisos.
+    }
+}
+
+/**
+ * Extrae `exp` de un JWT sin verificarlo (solo para saber cuándo caduca).
+ */
+function decodeJwtExpiry(token) {
+    try {
+        const payload = String(token || '').split('.')[1];
+        if (!payload) {
+            return null;
+        }
+        const json = JSON.parse(
+            Buffer.from(payload.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8')
+        );
+        return Number(json.exp) ? Number(json.exp) * 1000 : null;
+    } catch (error) {
+        return null;
+    }
 }
 
 function getSession() {
@@ -38,19 +67,48 @@ function getSession() {
     }
     return {
         token: store.token,
-        user: store.user || null
+        refreshToken: store.refreshToken || null,
+        user: store.user || null,
+        expiresAt: Number(store.expiresAt) || decodeJwtExpiry(store.token),
+        savedAt: store.savedAt || null
     };
 }
 
-function saveSession({ token, user }) {
+function saveSession({ token, user, refreshToken, expiresAt }) {
+    const previous = readStore();
+    const resolvedRefreshToken = refreshToken !== undefined ? refreshToken : previous.refreshToken || null;
+    const resolvedUser = user !== undefined ? user : previous.user || null;
+
     writeStore({
         token,
-        user: user ? {
-            id: user.id,
-            email: user.email,
-            name: user.name
-        } : null
+        refreshToken: resolvedRefreshToken,
+        user: resolvedUser ? {
+            id: resolvedUser.id,
+            email: resolvedUser.email,
+            name: resolvedUser.name
+        } : null,
+        expiresAt: Number(expiresAt) || decodeJwtExpiry(token),
+        savedAt: new Date().toISOString()
     });
+}
+
+/**
+ * Actualiza token/refreshToken conservando el usuario almacenado.
+ */
+function updateTokens({ token, refreshToken, expiresAt }) {
+    const store = readStore();
+    if (!store.token) {
+        return null;
+    }
+    const nextToken = token || store.token;
+    writeStore({
+        ...store,
+        token: nextToken,
+        refreshToken: refreshToken !== undefined ? refreshToken : store.refreshToken || null,
+        expiresAt: Number(expiresAt) || decodeJwtExpiry(nextToken),
+        savedAt: new Date().toISOString()
+    });
+    return getSession();
 }
 
 function clearSession() {
@@ -67,6 +125,8 @@ function isLoggedIn() {
 module.exports = {
     getSession,
     saveSession,
+    updateTokens,
     clearSession,
-    isLoggedIn
+    isLoggedIn,
+    decodeJwtExpiry
 };

@@ -1,0 +1,340 @@
+name: Build & Release
+
+# Compila y publica los tres artefactos:
+#   - Windows  (instalador NSIS .exe)
+#   - Linux    (AppImage)
+#   - Arch     (paquete pacman .pkg.tar.zst + repositorio bjrsoftware.db)
+# Y los publica en GitHub Releases y, si hay secretos configurados, en el
+# data lake (https://datalake.dambra-os.com/public/remote-controller/releases/).
+
+on:
+    push:
+        branches: [main]
+        paths-ignore:
+            - "**.md"
+            - "distros/**/README.md"
+    release:
+        types: [published]
+    workflow_dispatch:
+        inputs:
+            publish_github_release:
+                description: "Publicar release en GitHub"
+                type: boolean
+                default: true
+            publish_datalake:
+                description: "Subir artefactos al data lake"
+                type: boolean
+                default: true
+
+permissions:
+    contents: write
+
+concurrency:
+    group: release-${{ github.ref }}
+    cancel-in-progress: false
+
+env:
+    NODE_VERSION: "20"
+
+jobs:
+    # ---------------------------------------------------------------- Windows
+    build-windows:
+        if: github.actor != 'github-actions[bot]'
+        runs-on: windows-2022
+        timeout-minutes: 45
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: ${{ env.NODE_VERSION }}
+
+            - name: Setup MSVC toolchain
+              uses: ilammy/msvc-dev-cmd@v1
+              with:
+                  arch: x64
+
+            - name: Install dependencies
+              shell: bash
+              run: npm install --no-audit --no-fund
+
+            - name: Build native modules
+              shell: bash
+              run: npm run build:native
+
+            - name: Build styles
+              shell: bash
+              run: npm run build:sass
+
+            - name: Build Windows installer
+              shell: bash
+              run: npm run dist:win -- --publish never
+
+            - name: Upload Windows artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: windows-installer
+                  if-no-files-found: error
+                  retention-days: 7
+                  path: dist/*.exe
+
+    # ------------------------------------------------------------- AppImage
+    # Se compila en Ubuntu 22.04 para no exigir una glibc más nueva que la de
+    # la mayoría de distribuciones (Ubuntu 24.04 usaría glibc 2.39).
+    build-linux-appimage:
+        if: github.actor != 'github-actions[bot]'
+        runs-on: ubuntu-22.04
+        timeout-minutes: 45
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: ${{ env.NODE_VERSION }}
+
+            - name: Install Linux build dependencies
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y --no-install-recommends \
+                      build-essential python3 make g++ pkg-config \
+                      libx11-dev libxtst-dev libxi-dev libxext-dev libxrandr-dev \
+                      libpng-dev libxkbcommon-dev libudev-dev
+
+            - name: Install dependencies
+              run: npm install --no-audit --no-fund
+
+            - name: Build native modules
+              run: npm run build:native
+
+            - name: Build styles
+              run: npm run build:sass
+
+            - name: Build Linux AppImage
+              run: npm run dist:linux -- --publish never
+
+            - name: Upload Linux artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: linux-appimage
+                  if-no-files-found: error
+                  retention-days: 7
+                  path: dist/*.AppImage
+
+    # ------------------------------------------------------- Arch / pacman
+    # Reutiliza el AppImage ya compilado (evita recompilar Electron dentro del
+    # contenedor) y genera el paquete pacman + el índice del repositorio.
+    build-arch-package:
+        if: github.actor != 'github-actions[bot]'
+        needs: build-linux-appimage
+        runs-on: ubuntu-latest
+        timeout-minutes: 40
+        container: archlinux:latest
+        steps:
+            - name: Install Arch dependencies
+              run: |
+                  pacman -Syu --noconfirm --disable-download-timeout
+                  pacman -S --noconfirm --needed base-devel git nodejs npm sudo
+
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Download AppImage artifact
+              uses: actions/download-artifact@v4
+              with:
+                  name: linux-appimage
+                  path: dist
+
+            - name: Build Arch package
+              run: |
+                  id -u builder >/dev/null 2>&1 || useradd -m builder
+                  chown -R builder:builder "$GITHUB_WORKSPACE"
+                  runuser -u builder -- env HOME=/home/builder \
+                    bash -lc "cd '$GITHUB_WORKSPACE' && npm run dist:arch:pkg"
+
+            - name: Generate pacman repository index
+              run: |
+                  runuser -u builder -- env HOME=/home/builder \
+                    bash -lc "cd '$GITHUB_WORKSPACE' && npm run dist:arch:publish"
+
+            - name: Upload Arch package
+              uses: actions/upload-artifact@v4
+              with:
+                  name: archlinux-package
+                  if-no-files-found: error
+                  retention-days: 7
+                  path: |
+                      dist/*.pkg.tar.zst
+                      dist/datalake-upload/**
+
+    # ------------------------------------------------------------- Release
+    publish:
+        if: |
+            always() &&
+            needs.build-windows.result == 'success' &&
+            needs.build-linux-appimage.result == 'success' &&
+            needs.build-arch-package.result == 'success' &&
+            (github.event_name != 'workflow_dispatch' || inputs.publish_github_release)
+        needs: [build-windows, build-linux-appimage, build-arch-package]
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: ${{ env.NODE_VERSION }}
+
+            - name: Download artifacts
+              uses: actions/download-artifact@v4
+              with:
+                  path: release-assets
+
+            - name: Prepare release assets
+              run: |
+                  set -euo pipefail
+                  mkdir -p release-assets/arch/repo
+                  shopt -s nullglob
+                  for entry in release-assets/archlinux-package/*; do
+                    if [[ -d "$entry" ]]; then
+                      cp -a "$entry"/. release-assets/arch/repo/
+                    else
+                      cp -a "$entry" release-assets/arch/
+                    fi
+                  done
+                  find release-assets -type f | sort
+
+            - name: Compute release metadata
+              id: meta
+              run: |
+                  set -euo pipefail
+                  VERSION=$(node -p "require('./package.json').version")
+                  echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+                  if [[ "${GITHUB_EVENT_NAME}" == "release" ]]; then
+                    echo "tag=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
+                    echo "name=${{ github.event.release.name }}" >> "$GITHUB_OUTPUT"
+                  else
+                    echo "tag=v${VERSION}-build.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+                    echo "name=Remote Controllers v${VERSION} (build ${GITHUB_RUN_NUMBER})" >> "$GITHUB_OUTPUT"
+                  fi
+
+            - name: Build release notes
+              run: |
+                  set -euo pipefail
+                  PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || true)
+                  LOG_SOURCE="${PREV_TAG:+$PREV_TAG..HEAD}"
+                  LOG_SOURCE="${LOG_SOURCE:-HEAD}"
+                  CHANGES=$(git log $LOG_SOURCE --pretty=format:'- %s (%h)' -n 25 || true)
+                  [[ -n "$CHANGES" ]] || CHANGES='- Sin cambios detectados.'
+
+                  {
+                    echo "## Remote Controllers v${{ steps.meta.outputs.version }}"
+                    echo ""
+                    echo "- Commit: \`${GITHUB_SHA}\`"
+                    echo "- Fecha: $(date -u '+%Y-%m-%d %H:%M UTC')"
+                    echo ""
+                    echo "### Cambios"
+                    echo "$CHANGES"
+                    echo ""
+                    echo "### Artefactos"
+                    echo "- Windows: \`Remote Controllers Setup ${{ steps.meta.outputs.version }}.exe\`"
+                    echo "- Linux: \`Remote Controllers-${{ steps.meta.outputs.version }}.AppImage\`"
+                    echo "- Arch Linux: \`remotecontrollers-bin-${{ steps.meta.outputs.version }}-x86_64.pkg.tar.zst\`"
+                    echo ""
+                    echo "### Instalación en Arch"
+                    echo '```bash'
+                    echo "sudo pacman -Sy && sudo pacman -S remotecontrollers-bin"
+                    echo '```'
+                  } > release-body.md
+
+            - name: Check data lake credentials
+              id: lake
+              env:
+                  DATA_LAKE_URL: ${{ secrets.DATA_LAKE_URL }}
+                  DATA_LAKE_USER: ${{ secrets.DATA_LAKE_USER }}
+                  DATA_LAKE_PASSWORD: ${{ secrets.DATA_LAKE_PASSWORD }}
+              run: |
+                  if [[ -n "${DATA_LAKE_URL}" && -n "${DATA_LAKE_USER}" && -n "${DATA_LAKE_PASSWORD}" ]]; then
+                    echo "configured=true" >> "$GITHUB_OUTPUT"
+                  else
+                    echo "configured=false" >> "$GITHUB_OUTPUT"
+                    echo "::warning title=Data lake::Faltan los secrets DATA_LAKE_URL / DATA_LAKE_USER / DATA_LAKE_PASSWORD. El repositorio pacman NO se publicará (seguirá dando 404)."
+                  fi
+
+            - name: Publish GitHub Release
+              uses: softprops/action-gh-release@v2
+              with:
+                  tag_name: ${{ steps.meta.outputs.tag }}
+                  name: ${{ steps.meta.outputs.name }}
+                  target_commitish: ${{ github.sha }}
+                  body_path: release-body.md
+                  prerelease: false
+                  make_latest: true
+                  generate_release_notes: true
+                  fail_on_unmatched_files: false
+                  files: |
+                      release-assets/windows-installer/*.exe
+                      release-assets/linux-appimage/*.AppImage
+                      release-assets/arch/*.pkg.tar.zst
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Upload assets to data lake
+              if: steps.lake.outputs.configured == 'true' && (github.event_name != 'workflow_dispatch' || inputs.publish_datalake)
+              env:
+                  DATA_LAKE_URL: ${{ secrets.DATA_LAKE_URL }}
+                  DATA_LAKE_USER: ${{ secrets.DATA_LAKE_USER }}
+                  DATA_LAKE_PASSWORD: ${{ secrets.DATA_LAKE_PASSWORD }}
+                  DATA_LAKE_STORAGE_PATH: ${{ secrets.DATA_LAKE_STORAGE_PATH }}
+                  RELEASES_BASE: ${{ secrets.RELEASES_BASE }}
+              run: node scripts/upload-ci-assets.js "$GITHUB_WORKSPACE/release-assets"
+
+            - name: Verify data lake publication
+              if: steps.lake.outputs.configured == 'true'
+              env:
+                  RELEASES_BASE: ${{ secrets.RELEASES_BASE }}
+              run: |
+                  set -euo pipefail
+                  BASE="${RELEASES_BASE:-https://datalake.dambra-os.com/public/remote-controller/releases}"
+                  BASE="${BASE%/}"
+
+                  PKG_FILE=$(basename "$(ls release-assets/arch/*.pkg.tar.zst | head -1)")
+                  {
+                    echo "### Repositorio pacman"
+                    echo ""
+                  } >> "$GITHUB_STEP_SUMMARY"
+
+                  for url in "$BASE/arch/x86_64/bjrsoftware.db" "$BASE/arch/x86_64/bjrsoftware.files" "$BASE/arch/x86_64/$PKG_FILE"; do
+                    CODE=$(curl -s -o /dev/null -w "%{http_code}" "$url" || echo "000")
+                    echo "- \`$CODE\` $url" | tee -a "$GITHUB_STEP_SUMMARY"
+                    if [[ "$CODE" != "200" ]]; then
+                      echo "::warning title=Data lake::$url respondió $CODE"
+                    fi
+                  }
+
+    # Aviso explícito si algún artefacto no se pudo construir.
+    notify-failure:
+        if: |
+            always() &&
+            contains(needs.*.result, 'failure')
+        needs: [build-windows, build-linux-appimage, build-arch-package]
+        runs-on: ubuntu-latest
+        steps:
+            - name: Resumen del fallo
+              run: |
+                  echo "### Algún artefacto no se pudo construir" >> "$GITHUB_STEP_SUMMARY"
+                  echo "" >> "$GITHUB_STEP_SUMMARY"
+                  echo "| Job | Resultado |" >> "$GITHUB_STEP_SUMMARY"
+                  echo "|-----|-----------|" >> "$GITHUB_STEP_SUMMARY"
+                  echo "| windows | ${{ needs.build-windows.result }} |" >> "$GITHUB_STEP_SUMMARY"
+                  echo "| linux-appimage | ${{ needs.build-linux-appimage.result }} |" >> "$GITHUB_STEP_SUMMARY"
+                  echo "| arch-package | ${{ needs.build-arch-package.result }} |" >> "$GITHUB_STEP_SUMMARY"
+                  exit 1

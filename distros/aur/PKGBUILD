@@ -1,0 +1,89 @@
+# Maintainer: Damar Narváez Martínez <damar23nnm@gmail.com>
+#
+# Plantilla para publicar en AUR como `remote-controllers-bin`.
+#
+# Antes de subirlo:
+#   1. Ajusta pkgver con el número de la release de GitHub.
+#   2. Ejecuta `updpkgsums` para rellenar sha256sums reales (AUR no acepta SKIP).
+#   3. Genera el índice: `makepkg --printsrcinfo > .SRCINFO`
+#   4. `git clone ssh://aur@aur.archlinux.org/remote-controllers-bin.git`
+#   5. Copia PKGBUILD y .SRCINFO, y haz commit + push.
+#
+# Los usuarios lo instalarán con: yay -S remote-controllers-bin
+
+pkgname=remote-controllers-bin
+pkgver=1.0.8
+pkgrel=1
+pkgdesc="Control remoto seguro de tu PC desde la web o el movil (BJR Software)"
+arch=('x86_64')
+url="https://remote-controller.bjrsoftware.uk/"
+license=('ISC')
+provides=('remotecontrollers' 'remote-controller')
+conflicts=('remotecontrollers' 'remotecontrollers-git' 'remote-controller')
+options=('!debug' '!strip' '!emptydirs')
+install=remotecontrollers.install
+
+depends=(
+  'cairo'
+  'dconf'
+  'gdk-pixbuf2'
+  'glib2'
+  'glibc'
+  'gtk3'
+  'harfbuzz'
+  'libcups'
+  'libdrm'
+  'libevent'
+  'libgcrypt'
+  'libglvnd'
+  'libnotify'
+  'libpulse'
+  'libx11'
+  'libxcb'
+  'libxcomposite'
+  'libxdamage'
+  'libxext'
+  'libxfixes'
+  'libxkbcommon'
+  'libxrandr'
+  'libxtst'
+  'nspr'
+  'nss'
+  'pango'
+  'systemd-libs'
+  'ddcutil'
+  'polkit'
+  'xorg-xrandr'
+)
+
+optdepends=(
+  'libappindicator-gtk3: icono en la bandeja del sistema (SNI)'
+  'pipewire: control de volumen con wpctl (recomendado en Wayland)'
+  'kscreen: modos de pantalla en KDE Plasma Wayland'
+  'hyprland: modos de pantalla en Hyprland (hyprctl incluido)'
+  'wlr-randr: modos de pantalla en Sway/wlroots Wayland'
+)
+
+source=(
+  "remote-controllers-${pkgver}.AppImage::https://github.com/gummdoms/remoteController/releases/latest/download/Remote%20Controllers-${pkgver}.AppImage"
+  "remotecontrollers.desktop"
+  "remotecontrollers.sh"
+  "remotecontrollers.install"
+  "remotecontrollers.png::https://raw.githubusercontent.com/gummdoms/remoteController/main/assets/icon.png"
+)
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+
+prepare() {
+  cd "$srcdir"
+  chmod +x "remote-controllers-${pkgver}.AppImage"
+  "./remote-controllers-${pkgver}.AppImage" --appimage-extract >/dev/null
+}
+
+package() {
+  install -d "$pkgdir/opt/remotecontrollers"
+  cp -a "$srcdir/squashfs-root/." "$pkgdir/opt/remotecontrollers/"
+
+  install -Dm755 "$srcdir/remotecontrollers.sh" "$pkgdir/usr/bin/remotecontrollers"
+  install -Dm644 "$srcdir/remotecontrollers.desktop" "$pkgdir/usr/share/applications/remotecontrollers.desktop"
+  install -Dm644 "$srcdir/remotecontrollers.png" "$pkgdir/usr/share/icons/hicolor/512x512/apps/remotecontrollers.png"
+}

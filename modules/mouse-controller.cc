@@ -633,15 +633,44 @@ NODE_API_MODULE(mouse_controller, InitModule)
 #include <X11/XKBlib.h>
 #include <X11/XF86keysym.h>
 
+#include <linux/input-event-codes.h>
+#include <linux/uinput.h>
+
 #include <cctype>
+#include <cerrno>
+#include <chrono>
 #include <cmath>
+#include <cstdlib>
+#include <cstring>
+#include <fcntl.h>
 #include <optional>
+#include <string>
+#include <sys/ioctl.h>
+#include <thread>
 #include <unordered_map>
+#include <vector>
+#include <unistd.h>
 
 namespace
 {
+    bool IsWaylandSession()
+    {
+        const char *sessionType = std::getenv("XDG_SESSION_TYPE");
+        if (sessionType && std::strcmp(sessionType, "wayland") == 0)
+        {
+            return true;
+        }
+        const char *waylandDisplay = std::getenv("WAYLAND_DISPLAY");
+        return waylandDisplay && *waylandDisplay;
+    }
+
     Display *GetDisplay()
     {
+        if (IsWaylandSession())
+        {
+            // En Wayland XTest solo alcanza a clientes XWayland.
+            return nullptr;
+        }
         static Display *display = []() -> Display *
         {
             XInitThreads();
@@ -666,6 +695,438 @@ namespace
         std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c)
                        { return static_cast<char>(std::tolower(c)); });
         return lower;
+    }
+
+    // =====================================================================
+    // Backend uinput
+    //
+    // Inyecta eventos a nivel de kernel creando un dispositivo virtual, por lo
+    // que funciona igual en X11 y en Wayland (Hyprland, Sway, KDE Plasma,
+    // GNOME, COSMIC). Requiere permiso de escritura sobre /dev/uinput.
+    // =====================================================================
+    struct UinputBackend
+    {
+        int fd = -1;
+        bool attempted = false;
+        bool ready = false;
+        std::string error;
+        int posX = 0;
+        int posY = 0;
+    };
+
+    UinputBackend &Uinput()
+    {
+        static UinputBackend backend;
+        return backend;
+    }
+
+    const std::unordered_map<std::string, int> &UinputKeyMap()
+    {
+        static const std::unordered_map<std::string, int> map = {
+            {"esc", KEY_ESC}, {"escape", KEY_ESC},
+            {"backspace", KEY_BACKSPACE}, {"tab", KEY_TAB},
+            {"enter", KEY_ENTER}, {"return", KEY_ENTER},
+            {"space", KEY_SPACE}, {"delete", KEY_DELETE}, {"del", KEY_DELETE},
+            {"insert", KEY_INSERT}, {"home", KEY_HOME}, {"end", KEY_END},
+            {"pageup", KEY_PAGEUP}, {"pagedown", KEY_PAGEDOWN},
+            {"up", KEY_UP}, {"down", KEY_DOWN}, {"left", KEY_LEFT}, {"right", KEY_RIGHT},
+            {"capslock", KEY_CAPSLOCK}, {"numlock", KEY_NUMLOCK}, {"scrolllock", KEY_SCROLLLOCK},
+            {"printscreen", KEY_SYSRQ}, {"pause", KEY_PAUSE}, {"pausebreak", KEY_PAUSE},
+            {"numpad0", KEY_KP0}, {"numpad1", KEY_KP1}, {"numpad2", KEY_KP2},
+            {"numpad3", KEY_KP3}, {"numpad4", KEY_KP4}, {"numpad5", KEY_KP5},
+            {"numpad6", KEY_KP6}, {"numpad7", KEY_KP7}, {"numpad8", KEY_KP8},
+            {"numpad9", KEY_KP9}, {"numpadadd", KEY_KPPLUS}, {"numpadsubtract", KEY_KPMINUS},
+            {"numpadmultiply", KEY_KPASTERISK}, {"numpaddivide", KEY_KPSLASH},
+            {"numpaddecimal", KEY_KPDOT}, {"numpadenter", KEY_KPENTER},
+            {"f1", KEY_F1}, {"f2", KEY_F2}, {"f3", KEY_F3}, {"f4", KEY_F4},
+            {"f5", KEY_F5}, {"f6", KEY_F6}, {"f7", KEY_F7}, {"f8", KEY_F8},
+            {"f9", KEY_F9}, {"f10", KEY_F10}, {"f11", KEY_F11}, {"f12", KEY_F12},
+            {"media_play", KEY_PLAYPAUSE}, {"media_stop", KEY_STOPCD},
+            {"media_next", KEY_NEXTSONG}, {"media_prev", KEY_PREVIOUSSONG},
+            {"volume_up", KEY_VOLUMEUP}, {"volume_down", KEY_VOLUMEDOWN},
+            {"volume_mute", KEY_MUTE},
+            {"lwin", KEY_LEFTMETA}, {"rwin", KEY_RIGHTMETA}, {"win", KEY_LEFTMETA},
+            {"windows", KEY_LEFTMETA}, {"super", KEY_LEFTMETA}, {"meta", KEY_LEFTMETA},
+            {"ctrl", KEY_LEFTCTRL}, {"control", KEY_LEFTCTRL}, {"lctrl", KEY_LEFTCTRL},
+            {"rctrl", KEY_RIGHTCTRL},
+            {"alt", KEY_LEFTALT}, {"lalt", KEY_LEFTALT}, {"ralt", KEY_RIGHTALT},
+            {"shift", KEY_LEFTSHIFT}, {"lshift", KEY_LEFTSHIFT}, {"rshift", KEY_RIGHTSHIFT},
+            {"mayus", KEY_LEFTSHIFT},
+            {"minus", KEY_MINUS}, {"equal", KEY_EQUAL},
+            {"leftbrace", KEY_LEFTBRACE}, {"rightbrace", KEY_RIGHTBRACE},
+            {"semicolon", KEY_SEMICOLON}, {"apostrophe", KEY_APOSTROPHE},
+            {"grave", KEY_GRAVE}, {"comma", KEY_COMMA}, {"dot", KEY_DOT},
+            {"slash", KEY_SLASH}, {"backslash", KEY_BACKSLASH}};
+        return map;
+    }
+
+    std::optional<int> ResolveUinputKey(const std::string &key)
+    {
+        const std::string normalized = Normalize(key);
+        if (normalized.empty())
+        {
+            return std::nullopt;
+        }
+        auto it = UinputKeyMap().find(normalized);
+        if (it != UinputKeyMap().end())
+        {
+            return it->second;
+        }
+        if (normalized.size() == 1)
+        {
+            const char c = normalized[0];
+            if (c >= 'a' && c <= 'z')
+            {
+                return KEY_A + (c - 'a');
+            }
+            if (c >= '0' && c <= '9')
+            {
+                return c == '0' ? KEY_0 : KEY_1 + (c - '1');
+            }
+        }
+        return std::nullopt;
+    }
+
+    bool IsUinputModifier(int code)
+    {
+        switch (code)
+        {
+        case KEY_LEFTSHIFT:
+        case KEY_RIGHTSHIFT:
+        case KEY_LEFTCTRL:
+        case KEY_RIGHTCTRL:
+        case KEY_LEFTALT:
+        case KEY_RIGHTALT:
+        case KEY_LEFTMETA:
+        case KEY_RIGHTMETA:
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    bool WriteUinput(int type, int code, int value)
+    {
+        UinputBackend &backend = Uinput();
+        if (backend.fd < 0)
+        {
+            return false;
+        }
+        struct input_event event;
+        std::memset(&event, 0, sizeof(event));
+        event.type = static_cast<__u16>(type);
+        event.code = static_cast<__u16>(code);
+        event.value = value;
+        const ssize_t written = ::write(backend.fd, &event, sizeof(event));
+        if (written != static_cast<ssize_t>(sizeof(event)))
+        {
+            // El dispositivo puede desaparecer tras suspender/hibernar.
+            // Se cierra el descriptor para poder recrearlo en el siguiente uso.
+            ::close(backend.fd);
+            backend.fd = -1;
+            backend.ready = false;
+            backend.attempted = false;
+            backend.error.clear();
+            return false;
+        }
+        return true;
+    }
+
+    bool SyncUinput()
+    {
+        return WriteUinput(EV_SYN, SYN_REPORT, 0);
+    }
+
+    bool CreateUinputDevice(int fd)
+    {
+        if (ioctl(fd, UI_SET_EVBIT, EV_KEY) < 0 ||
+            ioctl(fd, UI_SET_EVBIT, EV_REL) < 0)
+        {
+            return false;
+        }
+
+        std::vector<int> keys;
+        keys.reserve(UinputKeyMap().size() + 64);
+        for (const auto &entry : UinputKeyMap())
+        {
+            keys.push_back(entry.second);
+        }
+        for (int code = KEY_A; code <= KEY_Z; ++code)
+        {
+            keys.push_back(code);
+        }
+        for (int code = KEY_1; code <= KEY_0; ++code)
+        {
+            keys.push_back(code);
+        }
+        keys.push_back(BTN_LEFT);
+        keys.push_back(BTN_RIGHT);
+        keys.push_back(BTN_MIDDLE);
+
+        for (int code : keys)
+        {
+            if (ioctl(fd, UI_SET_KEYBIT, code) < 0)
+            {
+                return false;
+            }
+        }
+
+        ioctl(fd, UI_SET_RELBIT, REL_X);
+        ioctl(fd, UI_SET_RELBIT, REL_Y);
+        ioctl(fd, UI_SET_RELBIT, REL_WHEEL);
+        ioctl(fd, UI_SET_RELBIT, REL_HWHEEL);
+
+        struct uinput_setup setup;
+        std::memset(&setup, 0, sizeof(setup));
+        setup.id.bustype = BUS_USB;
+        setup.id.vendor = 0x1209; // pid.codes
+        setup.id.product = 0x0001;
+        setup.id.version = 1;
+        std::strncpy(setup.name, "Remote Controllers Virtual Input", UINPUT_MAX_NAME_SIZE - 1);
+        setup.ff_effects_max = 0;
+
+        if (ioctl(fd, UI_DEV_SETUP, &setup) < 0)
+        {
+            return false;
+        }
+        if (ioctl(fd, UI_DEV_CREATE) < 0)
+        {
+            return false;
+        }
+
+        // El compositor necesita un instante para enumerar el dispositivo; si
+        // se escribe de inmediato se pueden perder los primeros eventos.
+        std::this_thread::sleep_for(std::chrono::milliseconds(120));
+        return true;
+    }
+
+    bool EnsureUinput()
+    {
+        UinputBackend &backend = Uinput();
+        if (backend.ready)
+        {
+            return true;
+        }
+        if (backend.attempted && !backend.error.empty())
+        {
+            return false;
+        }
+        backend.attempted = true;
+
+        int fd = ::open("/dev/uinput", O_WRONLY | O_NONBLOCK | O_CLOEXEC);
+        if (fd < 0)
+        {
+            fd = ::open("/dev/input/uinput", O_WRONLY | O_NONBLOCK | O_CLOEXEC);
+        }
+        if (fd < 0)
+        {
+            backend.error = std::string("No se pudo abrir /dev/uinput: ") + std::strerror(errno);
+            return false;
+        }
+
+        if (!CreateUinputDevice(fd))
+        {
+            backend.error = std::string("No se pudo crear el dispositivo uinput: ") + std::strerror(errno);
+            ::close(fd);
+            return false;
+        }
+
+        backend.fd = fd;
+        backend.ready = true;
+        backend.error.clear();
+        return true;
+    }
+
+    void DestroyUinput()
+    {
+        UinputBackend &backend = Uinput();
+        if (backend.fd >= 0)
+        {
+            ioctl(backend.fd, UI_DEV_DESTROY);
+            ::close(backend.fd);
+        }
+        backend.fd = -1;
+        backend.ready = false;
+        backend.attempted = false;
+    }
+
+    // Decide el backend activo: uinput en Wayland (XTest no llega a clientes
+    // nativos) y XTest en X11. Si no hay pantalla X, se usa uinput.
+    bool UseUinput()
+    {
+        if (Uinput().ready)
+        {
+            return true;
+        }
+        if (IsWaylandSession())
+        {
+            return EnsureUinput();
+        }
+        if (GetDisplay())
+        {
+            return false;
+        }
+        return EnsureUinput();
+    }
+
+    bool EmitPointerMotion(int dx, int dy)
+    {
+        UinputBackend &backend = Uinput();
+        const bool ok = WriteUinput(EV_REL, REL_X, dx) &&
+                        WriteUinput(EV_REL, REL_Y, dy) &&
+                        SyncUinput();
+        if (ok)
+        {
+            backend.posX += dx;
+            backend.posY += dy;
+        }
+        return ok;
+    }
+
+    bool EmitButton(int button, bool down)
+    {
+        return WriteUinput(EV_KEY, button, down ? 1 : 0) && SyncUinput();
+    }
+
+    bool TapButton(int button)
+    {
+        return EmitButton(button, true) && EmitButton(button, false);
+    }
+
+    bool EmitScroll(int steps)
+    {
+        if (steps == 0)
+        {
+            return true;
+        }
+        return WriteUinput(EV_REL, REL_WHEEL, steps) && SyncUinput();
+    }
+
+    bool EmitKey(int code, bool down)
+    {
+        return WriteUinput(EV_KEY, code, down ? 1 : 0) && SyncUinput();
+    }
+
+    bool TapKey(int code)
+    {
+        return EmitKey(code, true) && EmitKey(code, false);
+    }
+
+    struct UinputChar
+    {
+        int code;
+        bool shift;
+    };
+
+    std::optional<UinputChar> ResolveUinputChar(char32_t ch)
+    {
+        if (ch >= U'a' && ch <= U'z')
+        {
+            return UinputChar{KEY_A + static_cast<int>(ch - U'a'), false};
+        }
+        if (ch >= U'A' && ch <= U'Z')
+        {
+            return UinputChar{KEY_A + static_cast<int>(ch - U'A'), true};
+        }
+        if (ch >= U'0' && ch <= U'9')
+        {
+            return UinputChar{ch == U'0' ? KEY_0 : KEY_1 + static_cast<int>(ch - U'1'), false};
+        }
+
+        switch (ch)
+        {
+        case U' ':
+            return UinputChar{KEY_SPACE, false};
+        case U'\n':
+        case U'\r':
+            return UinputChar{KEY_ENTER, false};
+        case U'\t':
+            return UinputChar{KEY_TAB, false};
+        case U'-':
+            return UinputChar{KEY_MINUS, false};
+        case U'_':
+            return UinputChar{KEY_MINUS, true};
+        case U'=':
+            return UinputChar{KEY_EQUAL, false};
+        case U'+':
+            return UinputChar{KEY_EQUAL, true};
+        case U'[':
+            return UinputChar{KEY_LEFTBRACE, false};
+        case U'{':
+            return UinputChar{KEY_LEFTBRACE, true};
+        case U']':
+            return UinputChar{KEY_RIGHTBRACE, false};
+        case U'}':
+            return UinputChar{KEY_RIGHTBRACE, true};
+        case U';':
+            return UinputChar{KEY_SEMICOLON, false};
+        case U':':
+            return UinputChar{KEY_SEMICOLON, true};
+        case U'\'':
+            return UinputChar{KEY_APOSTROPHE, false};
+        case U'"':
+            return UinputChar{KEY_APOSTROPHE, true};
+        case U'`':
+            return UinputChar{KEY_GRAVE, false};
+        case U'~':
+            return UinputChar{KEY_GRAVE, true};
+        case U',':
+            return UinputChar{KEY_COMMA, false};
+        case U'<':
+            return UinputChar{KEY_COMMA, true};
+        case U'.':
+            return UinputChar{KEY_DOT, false};
+        case U'>':
+            return UinputChar{KEY_DOT, true};
+        case U'/':
+            return UinputChar{KEY_SLASH, false};
+        case U'?':
+            return UinputChar{KEY_SLASH, true};
+        case U'\\':
+            return UinputChar{KEY_BACKSLASH, false};
+        case U'|':
+            return UinputChar{KEY_BACKSLASH, true};
+        case U'!':
+            return UinputChar{KEY_1, true};
+        case U'@':
+            return UinputChar{KEY_2, true};
+        case U'#':
+            return UinputChar{KEY_3, true};
+        case U'$':
+            return UinputChar{KEY_4, true};
+        case U'%':
+            return UinputChar{KEY_5, true};
+        case U'^':
+            return UinputChar{KEY_6, true};
+        case U'&':
+            return UinputChar{KEY_7, true};
+        case U'*':
+            return UinputChar{KEY_8, true};
+        case U'(':
+            return UinputChar{KEY_9, true};
+        case U')':
+            return UinputChar{KEY_0, true};
+        default:
+            return std::nullopt;
+        }
+    }
+
+    void TypeUinputChar(char32_t ch)
+    {
+        auto mapping = ResolveUinputChar(ch);
+        if (!mapping)
+        {
+            return;
+        }
+        if (mapping->shift)
+        {
+            EmitKey(KEY_LEFTSHIFT, true);
+        }
+        TapKey(mapping->code);
+        if (mapping->shift)
+        {
+            EmitKey(KEY_LEFTSHIFT, false);
+        }
     }
 
     std::optional<KeyCode> FallbackKeycodeForKeysym(KeySym keysym)
@@ -924,13 +1385,24 @@ Napi::Value MoveMouseRelative(const Napi::CallbackInfo &info)
         Napi::TypeError::New(env, "Los argumentos deben ser números").ThrowAsJavaScriptException();
         return env.Null();
     }
+
+    int dx = info[0].As<Napi::Number>().Int32Value();
+    int dy = info[1].As<Napi::Number>().Int32Value();
+
+    if (UseUinput())
+    {
+        if (!EmitPointerMotion(dx, dy))
+        {
+            Napi::Error::New(env, "uinput no pudo mover el puntero (permisos de /dev/uinput)").ThrowAsJavaScriptException();
+            return env.Null();
+        }
+        return Napi::Boolean::New(env, true);
+    }
+
     if (!EnsureDisplay(env))
     {
         return env.Null();
     }
-
-    int dx = info[0].As<Napi::Number>().Int32Value();
-    int dy = info[1].As<Napi::Number>().Int32Value();
 
     XTestFakeRelativeMotionEvent(GetDisplay(), dx, dy, CurrentTime);
     XFlush(GetDisplay());
@@ -940,6 +1412,15 @@ Napi::Value MoveMouseRelative(const Napi::CallbackInfo &info)
 Napi::Value GetMousePosition(const Napi::CallbackInfo &info)
 {
     Napi::Env env = info.Env();
+
+    if (UseUinput())
+    {
+        Napi::Object tracked = Napi::Object::New(env);
+        tracked.Set("x", Napi::Number::New(env, Uinput().posX));
+        tracked.Set("y", Napi::Number::New(env, Uinput().posY));
+        return tracked;
+    }
+
     if (!EnsureDisplay(env))
     {
         return env.Null();
@@ -989,6 +1470,17 @@ Napi::Value Click(const Napi::CallbackInfo &info)
         return env.Null();
     }
 
+    if (UseUinput())
+    {
+        const int uinputButton = btn == 3 ? BTN_RIGHT : (btn == 2 ? BTN_MIDDLE : BTN_LEFT);
+        if (!TapButton(uinputButton))
+        {
+            Napi::Error::New(env, "uinput no pudo enviar el clic").ThrowAsJavaScriptException();
+            return env.Null();
+        }
+        return Napi::Boolean::New(env, true);
+    }
+
     SendButton(btn, true);
     SendButton(btn, false);
     return Napi::Boolean::New(env, true);
@@ -1022,6 +1514,16 @@ Napi::Value Scroll(const Napi::CallbackInfo &info)
         return Napi::Boolean::New(env, true);
     }
 
+    if (UseUinput())
+    {
+        if (!EmitScroll(steps))
+        {
+            Napi::Error::New(env, "uinput no pudo enviar el scroll").ThrowAsJavaScriptException();
+            return env.Null();
+        }
+        return Napi::Boolean::New(env, true);
+    }
+
     unsigned int button = steps > 0 ? 4 : 5;
     for (int i = 0; i < std::abs(steps); ++i)
     {
@@ -1041,6 +1543,12 @@ Napi::Value MouseDown(const Napi::CallbackInfo &info)
     }
     unsigned int btn = button == "right" ? 3 : button == "middle" ? 2
                                                                   : 1;
+    if (UseUinput())
+    {
+        const int uinputButton = btn == 3 ? BTN_RIGHT : (btn == 2 ? BTN_MIDDLE : BTN_LEFT);
+        EmitButton(uinputButton, true);
+        return Napi::Boolean::New(env, true);
+    }
     SendButton(btn, true);
     return Napi::Boolean::New(env, true);
 }
@@ -1055,6 +1563,12 @@ Napi::Value MouseUp(const Napi::CallbackInfo &info)
     }
     unsigned int btn = button == "right" ? 3 : button == "middle" ? 2
                                                                   : 1;
+    if (UseUinput())
+    {
+        const int uinputButton = btn == 3 ? BTN_RIGHT : (btn == 2 ? BTN_MIDDLE : BTN_LEFT);
+        EmitButton(uinputButton, false);
+        return Napi::Boolean::New(env, true);
+    }
     SendButton(btn, false);
     return Napi::Boolean::New(env, true);
 }
@@ -1123,6 +1637,23 @@ Napi::Value KeyTap(const Napi::CallbackInfo &info)
     }
 
     std::string key = Normalize(info[0].As<Napi::String>().Utf8Value());
+
+    if (UseUinput())
+    {
+        auto code = ResolveUinputKey(key);
+        if (!code)
+        {
+            Napi::TypeError::New(env, "Tecla especial desconocida").ThrowAsJavaScriptException();
+            return env.Null();
+        }
+        if (!TapKey(*code))
+        {
+            Napi::Error::New(env, "uinput no pudo enviar la tecla").ThrowAsJavaScriptException();
+            return env.Null();
+        }
+        return Napi::Boolean::New(env, true);
+    }
+
     KeySym keysym = ResolveKeySym(key);
     if (keysym == NoSymbol)
     {
@@ -1143,6 +1674,29 @@ Napi::Value KeyDown(const Napi::CallbackInfo &info)
         return env.Null();
     }
     std::string key = Normalize(info[0].As<Napi::String>().Utf8Value());
+
+    if (UseUinput())
+    {
+        auto code = ResolveUinputKey(key);
+        if (!code)
+        {
+            auto mapping = key.size() == 1 ? ResolveUinputChar(static_cast<unsigned char>(key[0])) : std::nullopt;
+            if (!mapping)
+            {
+                Napi::TypeError::New(env, "Tecla especial desconocida").ThrowAsJavaScriptException();
+                return env.Null();
+            }
+            if (mapping->shift)
+            {
+                EmitKey(KEY_LEFTSHIFT, true);
+            }
+            EmitKey(mapping->code, true);
+            return Napi::Boolean::New(env, true);
+        }
+        EmitKey(*code, true);
+        return Napi::Boolean::New(env, true);
+    }
+
     HandleKeyEvent(key, true);
     return Napi::Boolean::New(env, true);
 }
@@ -1156,6 +1710,29 @@ Napi::Value KeyUp(const Napi::CallbackInfo &info)
         return env.Null();
     }
     std::string key = Normalize(info[0].As<Napi::String>().Utf8Value());
+
+    if (UseUinput())
+    {
+        auto code = ResolveUinputKey(key);
+        if (!code)
+        {
+            auto mapping = key.size() == 1 ? ResolveUinputChar(static_cast<unsigned char>(key[0])) : std::nullopt;
+            if (!mapping)
+            {
+                Napi::TypeError::New(env, "Tecla especial desconocida").ThrowAsJavaScriptException();
+                return env.Null();
+            }
+            EmitKey(mapping->code, false);
+            if (mapping->shift)
+            {
+                EmitKey(KEY_LEFTSHIFT, false);
+            }
+            return Napi::Boolean::New(env, true);
+        }
+        EmitKey(*code, false);
+        return Napi::Boolean::New(env, true);
+    }
+
     HandleKeyEvent(key, false);
     return Napi::Boolean::New(env, true);
 }
@@ -1170,6 +1747,16 @@ Napi::Value TypeText(const Napi::CallbackInfo &info)
     }
 
     std::u16string text = info[0].As<Napi::String>().Utf16Value();
+
+    if (UseUinput())
+    {
+        for (char32_t cp : ToCodepoints(text))
+        {
+            TypeUinputChar(cp);
+        }
+        return Napi::Boolean::New(env, true);
+    }
+
     for (char32_t cp : ToCodepoints(text))
     {
         SendCharacterChar32(cp);
@@ -1186,6 +1773,53 @@ Napi::Value KeyCombo(const Napi::CallbackInfo &info)
         return env.Null();
     }
     Napi::Array arr = info[0].As<Napi::Array>();
+
+    if (UseUinput())
+    {
+        std::vector<int> modifiers;
+        std::vector<int> presses;
+
+        for (uint32_t i = 0; i < arr.Length(); ++i)
+        {
+            Napi::Value value = arr[i];
+            if (!value.IsString())
+            {
+                continue;
+            }
+            std::string key = Normalize(value.As<Napi::String>().Utf8Value());
+            auto code = ResolveUinputKey(key);
+            if (!code)
+            {
+                continue;
+            }
+            if (IsUinputModifier(*code))
+            {
+                if (std::find(modifiers.begin(), modifiers.end(), *code) == modifiers.end())
+                {
+                    modifiers.push_back(*code);
+                }
+            }
+            else
+            {
+                presses.push_back(*code);
+            }
+        }
+
+        for (int mod : modifiers)
+        {
+            EmitKey(mod, true);
+        }
+        for (int code : presses)
+        {
+            TapKey(code);
+        }
+        for (auto it = modifiers.rbegin(); it != modifiers.rend(); ++it)
+        {
+            EmitKey(*it, false);
+        }
+        return Napi::Boolean::New(env, true);
+    }
+
     std::vector<KeySym> modifiers;
     std::vector<KeySym> presses;
 
@@ -1230,6 +1864,39 @@ Napi::Value KeyCombo(const Napi::CallbackInfo &info)
     return Napi::Boolean::New(env, true);
 }
 
+// Permite a la capa JS diagnosticar el backend de entrada activo.
+Napi::Value GetInputBackend(const Napi::CallbackInfo &info)
+{
+    Napi::Env env = info.Env();
+    Napi::Object status = Napi::Object::New(env);
+
+    const bool wayland = IsWaylandSession();
+    if (UseUinput())
+    {
+        status.Set("backend", Napi::String::New(env, "uinput"));
+    }
+    else if (GetDisplay())
+    {
+        status.Set("backend", Napi::String::New(env, "xtest"));
+    }
+    else
+    {
+        status.Set("backend", Napi::String::New(env, "none"));
+    }
+
+    status.Set("wayland", Napi::Boolean::New(env, wayland));
+    status.Set("uinputReady", Napi::Boolean::New(env, Uinput().ready));
+    status.Set("error", Napi::String::New(env, Uinput().error));
+    return status;
+}
+
+// Libera el dispositivo virtual (equivale a desconectar el teclado/ratón).
+Napi::Value DisposeInput(const Napi::CallbackInfo &info)
+{
+    DestroyUinput();
+    return Napi::Boolean::New(info.Env(), true);
+}
+
 Napi::Object InitModule(Napi::Env env, Napi::Object exports)
 {
     exports.Set("moveRelative", Napi::Function::New(env, MoveMouseRelative));
@@ -1244,6 +1911,8 @@ Napi::Object InitModule(Napi::Env env, Napi::Object exports)
     exports.Set("keyDown", Napi::Function::New(env, KeyDown));
     exports.Set("keyUp", Napi::Function::New(env, KeyUp));
     exports.Set("keyCombo", Napi::Function::New(env, KeyCombo));
+    exports.Set("getInputBackend", Napi::Function::New(env, GetInputBackend));
+    exports.Set("dispose", Napi::Function::New(env, DisposeInput));
     return exports;
 }
 

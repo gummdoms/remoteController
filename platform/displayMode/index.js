@@ -1,5 +1,6 @@
 const windowsBackend = require('./windows-backend');
 const linuxKscreenBackend = require('./linux-kscreen-backend');
+const linuxHyprlandBackend = require('./linux-hyprland-backend');
 const linuxWlrBackend = require('./linux-wlr-backend');
 const linuxXrandrBackend = require('./linux-xrandr-backend');
 const noBackend = require('./no-backend');
@@ -10,6 +11,9 @@ function selectBackend() {
     }
     if (linuxKscreenBackend.isSupported()) {
         return linuxKscreenBackend;
+    }
+    if (linuxHyprlandBackend.isSupported()) {
+        return linuxHyprlandBackend;
     }
     if (linuxWlrBackend.isSupported()) {
         return linuxWlrBackend;

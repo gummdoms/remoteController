@@ -1,11 +1,13 @@
 [Desktop Entry]
 Type=Application
 Name=Remote Controllers
+GenericName=Remote Desktop Agent
 Comment=Control remoto seguro de tu PC (BJR Software)
-Exec=remotecontrollers
+Exec=remotecontrollers %U
 Icon=remotecontrollers
 Terminal=false
 StartupNotify=true
+StartupWMClass=remotecontrollers
 X-GNOME-UsesNotifications=true
-Categories=Utility;Network;
-Keywords=remote;control;desktop;bjrsoftware;
+Categories=Utility;Network;RemoteAccess;
+Keywords=remote;control;desktop;hyprland;wayland;bjrsoftware;

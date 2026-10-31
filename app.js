@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Tray, Menu, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, dialog, shell, powerMonitor } = require('electron');
 
 // Compatibilidad con compositores Wayland (COSMIC, GNOME Wayland, etc.):
 // usa Wayland nativo cuando esté disponible y cae a X11 automáticamente.
@@ -23,6 +23,7 @@ const SettingsStore = require('./classes/Settings.js');
 const displayControl = require('./platform/displayControl');
 const audioControl = require('./platform/audioControl');
 const displayMode = require('./platform/displayMode');
+const linuxDeps = require('./platform/dependencies/linux-deps');
 const interceptionKeyboard = require('./platform/interception-keyboard');
 const cloudAgent = require('./desktop/cloud-agent');
 const deviceStore = require('./desktop/device-store');
@@ -103,7 +104,7 @@ const parseBoolean = (value) => {
     }
     return Boolean(value);
 };
-const waylandInputMessage = 'Sesión Wayland detectada. El control remoto de entrada requiere permisos del compositor y puede mostrar avisos repetidos.';
+const waylandInputMessage = 'Sesión Wayland detectada. El control de entradas usa un dispositivo virtual uinput y requiere acceso a /dev/uinput.';
 const ensureInputInjectionAvailable = (res) => {
     if (!isWaylandSession || allowWaylandInputExperimental) {
         return true;
@@ -151,6 +152,17 @@ function buildLinuxLogoutCommands() {
                 `${kdeBinary} org.kde.LogoutPrompt /LogoutPrompt logout`
             );
         }
+    }
+
+    // Compositores Wayland con CLI propia
+    if (process.env.HYPRLAND_INSTANCE_SIGNATURE || /hyprland/.test(currentDesktop)) {
+        commands.push('hyprctl dispatch exit');
+    }
+    if (process.env.SWAYSOCK || /sway/.test(currentDesktop)) {
+        commands.push('swaymsg exit');
+    }
+    if (process.env.NIRI_SOCKET) {
+        commands.push('niri msg action quit');
     }
 
     if (process.env.XDG_SESSION_ID) {
@@ -509,6 +521,15 @@ settingsStore.getInterceptionInputEnabled(false)
         console.warn('No se pudo leer preferencia interception_input_enabled:', error.message);
     });
 
+let autoInstallDeps = true;
+settingsStore.getAutoInstallDeps(true)
+    .then((enabled) => {
+        autoInstallDeps = Boolean(enabled);
+    })
+    .catch((error) => {
+        console.warn('No se pudo leer preferencia auto_install_deps:', error.message);
+    });
+
 const MOUSE_POINTER_MIN = 0.5;
 const MOUSE_POINTER_MAX = 6;
 const MOUSE_SCROLL_MIN = 0.5;
@@ -587,8 +608,8 @@ const createWindow = () => {
     mainWindow.on('unmaximize', emitWindowState);
 
     mainWindow.on('minimize', (event) => {
-        // En Linux sin bandeja visible (p. ej. COSMIC sin soporte SNI), ocultar
-        // la ventana la deja inaccesible; se minimiza de forma normal.
+        // En Linux sin bandeja visible (p. ej. Hyprland/COSMIC sin SNI),
+        // ocultar la ventana la deja inaccesible; se minimiza de forma normal.
         if (isLinux && !tray) {
             return;
         }
@@ -597,11 +618,17 @@ const createWindow = () => {
     });
 
     mainWindow.on('close', (event) => {
-        if (!app.quitting && tray) {
-            event.preventDefault();
-            mainWindow.hide();
+        if (app.quitting) {
+            return;
         }
-        return false;
+        // La app es un agente remoto: cerrar la ventana NO debe terminar la
+        // sesión. Se oculta y sigue en segundo plano (con o sin bandeja).
+        event.preventDefault();
+        mainWindow.hide();
+    });
+
+    mainWindow.on('closed', () => {
+        mainWindow = null;
     });
 };
 const createTray = () => {
@@ -639,15 +666,70 @@ if (hasSingleInstanceLock) {
                 mainWindow.webContents.send('cloud:statusChanged', status);
             }
         });
+
+        // Si el servidor rechaza el token del dispositivo (cierre 4401) se
+        // renueva la sesión y se vuelve a registrar el equipo sin pedir
+        // credenciales al usuario.
+        cloudAgent.setAuthHandlers({
+            onUnauthorized: () => sessionManager.handleUnauthorized()
+        });
+
+        sessionManager.onAuthStateChange((authState) => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('auth:stateChanged', authState);
+            }
+        });
+
         sessionManager.restoreSession()
             .then(() => {
+                sessionManager.startKeepAlive();
                 if (mainWindow && !mainWindow.isDestroyed()) {
                     mainWindow.webContents.send('auth:stateChanged', sessionManager.getAuthState());
                 }
             })
             .catch((error) => {
                 console.error('No se pudo restaurar la sesión:', error.message);
+                // La sesión no se cierra: se reintenta en segundo plano.
+                sessionManager.startKeepAlive();
             });
+
+        // Al volver de suspensión la red suele tardar: se fuerza la reconexión.
+        try {
+            powerMonitor.on('resume', () => {
+                console.log('Equipo reanudado de suspensión: reconectando agente cloud.');
+                cloudAgent.connectCloudAgent().catch(() => {});
+                sessionManager.ensureSession().catch(() => {});
+            });
+        } catch (error) {
+            console.warn('powerMonitor no disponible:', error.message);
+        }
+
+        // Instalación automática de dependencias opcionales (Linux).
+        // Se deja pasar unos segundos para que la ventana esté visible antes
+        // de que aparezca el diálogo de pkexec.
+        if (isLinux && autoInstallDeps) {
+            setTimeout(() => {
+                try {
+                    const deps = linuxDeps.getStatus();
+                    if (!deps.supported || !deps.needsInstall || !deps.canInstall) {
+                        return;
+                    }
+                    console.log('[deps] instalando dependencias faltantes:', deps.missingPackages.join(', '));
+                    linuxDeps.installMissing()
+                        .then((result) => {
+                            console.log('[deps]', result.message);
+                            if (mainWindow && !mainWindow.isDestroyed()) {
+                                mainWindow.webContents.send('dependencies:changed', result.status);
+                            }
+                        })
+                        .catch((error) => {
+                            console.warn('[deps] no se pudieron instalar:', error.message);
+                        });
+                } catch (error) {
+                    console.warn('[deps] error al comprobar dependencias:', error.message);
+                }
+            }, 8000);
+        }
     });
 
     app.on('activate', () => {
@@ -660,14 +742,28 @@ if (hasSingleInstanceLock) {
 }
 
 app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') {
+    // No se cierra el agente al cerrar la ventana: el equipo debe seguir
+    // accesible desde la web. La salida real se hace con "Salir" (tray o UI),
+    // que establece app.quitting antes de cerrar.
+    if (process.platform === 'darwin') {
+        return;
+    }
+    if (app.quitting) {
         app.quit();
     }
 });
 app.on('before-quit', () => {
     app.quitting = true;
     cloudAgent.stopCloudAgent();
+    sessionManager.stopKeepAlive();
     interceptionKeyboard.destroy();
+    try {
+        if (nativeInput && typeof nativeInput.dispose === 'function') {
+            nativeInput.dispose();
+        }
+    } catch (error) {
+        console.warn('No se pudo liberar el dispositivo de entrada virtual:', error.message);
+    }
     if (httpServer) {
         try {
             httpServer.close();
@@ -847,13 +943,29 @@ function getInputPermissionDiagnosis() {
         }
     })();
 
-    const needsAttention = sessionType === 'wayland' || !groupCheck.ok || !uinputCheck.ok;
+    const backendInfo = (() => {
+        try {
+            if (nativeInput && typeof nativeInput.getInputBackend === 'function') {
+                return nativeInput.getInputBackend();
+            }
+        } catch (error) {
+            return { backend: 'none', error: error.message };
+        }
+        return null;
+    })();
+
+    const isWayland = sessionType === 'wayland';
+    // En Wayland uinput es obligatorio (XTest no llega a clientes nativos).
+    // En X11 basta XTest, así que uinput es opcional.
+    const needsAttention = isWayland && !uinputCheck.ok;
+    const backendOk = Boolean(backendInfo && backendInfo.backend !== 'none');
+
     const checks = [
         {
-            name: 'Sesión Linux',
-            ok: sessionType !== 'unknown' && sessionType !== 'wayland',
-            details: sessionType === 'wayland'
-                ? 'XDG_SESSION_TYPE=wayland (puede pedir privilegios de entrada de forma repetida)'
+            name: 'Sesión de escritorio',
+            ok: true,
+            details: isWayland
+                ? `XDG_SESSION_TYPE=wayland (se usará uinput)${process.env.XDG_CURRENT_DESKTOP ? ` · ${process.env.XDG_CURRENT_DESKTOP}` : ''}`
                 : `XDG_SESSION_TYPE=${sessionType}`
         },
         {
@@ -865,6 +977,13 @@ function getInputPermissionDiagnosis() {
             name: 'Acceso a /dev/uinput',
             ok: uinputCheck.ok,
             details: `exists=${uinputCheck.exists} writable=${uinputCheck.writable}`
+        },
+        {
+            name: 'Backend de entrada activo',
+            ok: backendOk,
+            details: backendInfo
+                ? `${backendInfo.backend}${backendInfo.error ? ` (${backendInfo.error})` : ''}`
+                : 'Módulo nativo no disponible'
         }
     ];
 
@@ -875,24 +994,19 @@ function getInputPermissionDiagnosis() {
         "echo 'KERNEL==\"uinput\", MODE=\"0660\", GROUP=\"uinput\", OPTIONS+=\"static_node=uinput\"' | sudo tee /etc/udev/rules.d/99-uinput.rules",
         'sudo modprobe uinput',
         'sudo udevadm control --reload-rules && sudo udevadm trigger',
-        'Reinicia sesión para aplicar grupos'
+        'Reinicia sesión para aplicar los grupos'
     ];
-
-    if (sessionType === 'wayland') {
-        recommendedCommands.unshift(
-            'Para evitar avisos repetidos de privilegios de entrada, inicia sesión en X11 (Plasma/X11 o GNOME on Xorg).'
-        );
-    }
 
     return {
         platform: process.platform,
         sessionType,
         needsAttention,
-        message: sessionType === 'wayland'
-            ? 'Sesión Wayland detectada: el sistema puede solicitar permisos de control de entrada de forma recurrente.'
-            : needsAttention
-                ? 'Se detectaron condiciones que pueden provocar el aviso de privilegios de entrada en Linux.'
-            : 'Configuración de permisos de entrada en buen estado.',
+        message: needsAttention
+            ? 'Wayland detectado sin acceso a /dev/uinput: el mouse y el teclado remotos no funcionarán hasta configurarlo.'
+            : isWayland
+                ? 'Wayland con uinput listo: el control de mouse y teclado funciona en todos los compositores (Hyprland, Sway, KDE, GNOME, COSMIC).'
+                : 'Configuración de permisos de entrada en buen estado.',
+        backend: backendInfo,
         checks,
         recommendedCommands
     };
@@ -964,9 +1078,6 @@ async function applyLinuxInputPermissionFix() {
     if (!commandExists('pkexec')) {
         throw new Error('pkexec no está disponible. Instala polkit para aplicar la configuración automática.');
     }
-    if (isWaylandSession) {
-        throw new Error('Sesión Wayland detectada. Este ajuste no evita los avisos del compositor; usa una sesión X11 para evitar solicitudes repetidas.');
-    }
 
     const targetUser = resolveLinuxTargetUser();
     if (!targetUser) {
@@ -1002,10 +1113,21 @@ ipcMain.handle('service:getStatus', () => {
         platform: process.platform,
         sessionType: process.env.XDG_SESSION_TYPE || null,
         inputDiagnosis: getInputPermissionDiagnosis(),
+        dependencies: linuxDeps.getStatus(),
+        autoInstallDeps: Boolean(autoInstallDeps),
         inputControl: {
             waylandExperimentalAvailable: isLinux && isWaylandSession,
             waylandExperimentalEnabled: Boolean(allowWaylandInputExperimental),
             canInjectInput: !isWaylandSession || Boolean(allowWaylandInputExperimental),
+            backend: (() => {
+                try {
+                    return nativeInput && typeof nativeInput.getInputBackend === 'function'
+                        ? nativeInput.getInputBackend()
+                        : null;
+                } catch (error) {
+                    return null;
+                }
+            })(),
             interception: getInterceptionInputState()
         }
     };
@@ -1051,6 +1173,34 @@ ipcMain.handle('cloud:getStatus', () => {
 
 ipcMain.handle('service:diagnoseInputPermission', () => {
     return getInputPermissionDiagnosis();
+});
+
+ipcMain.handle('service:getDependencies', () => {
+    return linuxDeps.getStatus();
+});
+
+ipcMain.handle('service:getDependencyCommand', () => {
+    return { command: linuxDeps.getManualCommand() };
+});
+
+ipcMain.handle('service:installDependencies', async () => {
+    const result = await linuxDeps.installMissing();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('dependencies:changed', result.status);
+    }
+    return result;
+});
+
+ipcMain.handle('service:setAutoInstallDeps', async (_event, payload) => {
+    autoInstallDeps = Boolean(payload?.enabled);
+    await settingsStore.setAutoInstallDeps(autoInstallDeps);
+    return {
+        ok: true,
+        enabled: autoInstallDeps,
+        message: autoInstallDeps
+            ? 'Las dependencias que falten se instalarán al iniciar la app.'
+            : 'No se instalarán dependencias automáticamente.'
+    };
 });
 
 ipcMain.handle('service:applyInputPermissionFix', async () => {

@@ -177,6 +177,29 @@
                     </div>
                 </article>
             </section>
+
+            <section class="permission" id="dependencies-section" style="display:none;">
+                <article class="panel-card panel-card--full">
+                    <div class="panel-card__head">
+                        <h2>Componentes del sistema (Linux)</h2>
+                        <button class="btn-ghost" id="refresh-deps"><i class="bi bi-arrow-repeat"></i> Actualizar</button>
+                    </div>
+                    <p class="hint" id="deps-message">Comprobando herramientas disponibles...</p>
+                    <ul class="diag-list" id="deps-list"></ul>
+                    <label class="switch-row" for="auto-install-deps">
+                        <div>
+                            <strong>Instalar dependencias al iniciar</strong>
+                            <p>Si falta alguna herramienta (audio, brillo, pantallas), se instalará automáticamente pidiendo permisos de administrador.</p>
+                        </div>
+                        <input type="checkbox" id="auto-install-deps">
+                        <span class="switch-ui"></span>
+                    </label>
+                    <div class="panel-actions">
+                        <button class="btn-primary" id="install-deps"><i class="bi bi-download"></i> Instalar dependencias faltantes</button>
+                        <button class="btn-ghost" id="show-deps-command"><i class="bi bi-terminal"></i> Ver comando manual</button>
+                    </div>
+                </article>
+            </section>
         </div>
 
         <div class="container-mp3">

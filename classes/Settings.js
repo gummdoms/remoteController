@@ -156,6 +156,17 @@ class SettingsStore {
         await this.setPreference('interception_input_enabled', enabled ? '1' : '0');
         return { enabled: Boolean(enabled) };
     }
+
+    async getAutoInstallDeps(defaultValue = true) {
+        const raw = await this.getPreference('auto_install_deps', defaultValue ? '1' : '0');
+        const value = String(raw ?? '').toLowerCase();
+        return ['1', 'true', 'yes', 'on'].includes(value);
+    }
+
+    async setAutoInstallDeps(enabled) {
+        await this.setPreference('auto_install_deps', enabled ? '1' : '0');
+        return { enabled: Boolean(enabled) };
+    }
 }
 
 module.exports = SettingsStore;

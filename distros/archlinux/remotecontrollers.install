@@ -1,0 +1,49 @@
+# Mensajes posteriores a la instalación del paquete pacman.
+
+_pending_groups() {
+  local user
+  user="${SUDO_USER:-${USER:-}}"
+  if [[ -z "$user" || "$user" == "root" ]]; then
+    return 0
+  fi
+  id -nG "$user" 2>/dev/null | tr ' ' '\n' | grep -qx 'input' || echo "input"
+  id -nG "$user" 2>/dev/null | tr ' ' '\n' | grep -qx 'uinput' || echo "uinput"
+}
+
+post_install() {
+  cat <<'EOF'
+
+  Remote Controllers instalado.
+
+  Las librerías de Electron y las herramientas comunes (ddcutil, xorg-xrandr,
+  polkit) ya se instalaron con el paquete.
+
+  Para el control de mouse/teclado en Wayland (Hyprland, Sway, GNOME, KDE,
+  COSMIC) la app crea un dispositivo virtual uinput y necesita acceso a
+  /dev/uinput:
+
+    sudo groupadd -f uinput
+    sudo usermod -aG input,uinput,video "$USER"
+    echo uinput | sudo tee /etc/modules-load.d/uinput.conf
+    echo 'KERNEL=="uinput", MODE="0660", GROUP="uinput", OPTIONS+="static_node=uinput"' \
+      | sudo tee /etc/udev/rules.d/99-uinput.rules
+    sudo modprobe uinput
+    sudo udevadm control --reload-rules && sudo udevadm trigger
+    # Cierra sesion y vuelve a entrar para aplicar los grupos
+
+  Las herramientas que falten segun tu escritorio (kscreen en KDE, wlr-randr
+  en Sway, pipewire para audio) se pueden instalar desde la propia app:
+  pestana de servicios -> "Instalar dependencias faltantes" (usa pkexec).
+
+  Ejecuta:  remotecontrollers
+
+EOF
+}
+
+post_upgrade() {
+  post_install
+}
+
+post_remove() {
+  :
+}

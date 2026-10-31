@@ -20,6 +20,11 @@ $(document).ready(function () {
     const $interceptionToggle = $('#interception-input-toggle');
     const $interceptionStatus = $('#interception-input-status');
     const $refreshInterception = $('#refresh-interception-status');
+    const $depsSection = $('#dependencies-section');
+    const $depsList = $('#deps-list');
+    const $depsMessage = $('#deps-message');
+    const $installDeps = $('#install-deps');
+    const $autoInstallDeps = $('#auto-install-deps');
 
     let authMode = 'login';
     let latestCommands = [];
@@ -51,7 +56,15 @@ $(document).ready(function () {
         $cloudStatusPill.text(connected ? 'En línea' : 'Desconectado');
 
         if (auth.user) {
-            $userInfo.text(`Sesión: ${auth.user.name || auth.user.email}`);
+            const extras = [];
+            if (auth.expired) {
+                extras.push('sesión caducada, vuelve a iniciar sesión');
+            } else if (auth.offline) {
+                extras.push('sin conexión, reintentando');
+            }
+            $userInfo.text(
+                `Sesión: ${auth.user.name || auth.user.email}${extras.length ? ` (${extras.join(', ')})` : ''}`
+            );
         }
 
         if (paired && connected) {
@@ -75,6 +88,46 @@ $(document).ready(function () {
             $item.append(`<small>${check.details || 'Sin detalle'}</small>`);
             $diagList.append($item);
         });
+    };
+
+    const renderDependencies = (deps = {}) => {
+        const supported = Boolean(deps.supported);
+        $depsSection.toggle(supported);
+        if (!supported) {
+            return;
+        }
+
+        const distroName = deps.distro?.name || 'Linux';
+        const manager = deps.manager || 'no detectado';
+        const missing = deps.missingPackages || [];
+
+        $depsMessage.text(
+            missing.length
+                ? `${deps.message || ''} (${distroName} · ${manager})`
+                : `${deps.message || 'Todo instalado.'} (${distroName} · ${manager})`
+        );
+
+        $depsList.empty();
+        (deps.features || []).forEach((feature) => {
+            const $item = $('<li></li>').addClass(feature.ok ? 'diag-ok' : 'diag-bad');
+            const detail = feature.ok
+                ? `detectado: ${feature.binary}`
+                : `${feature.hint || 'No disponible'}${feature.packages?.length ? ` → ${feature.packages.join(', ')}` : ''}`;
+            $item.append(`<strong>${feature.ok ? 'OK' : 'Falta'} · ${feature.label}</strong>`);
+            $item.append(`<small>${detail}</small>`);
+            $depsList.append($item);
+        });
+
+        const canInstall = Boolean(deps.canInstall) && missing.length > 0;
+        $installDeps.prop('disabled', !canInstall);
+        $installDeps.attr(
+            'data-tooltip',
+            canInstall
+                ? `Instalar: ${missing.join(', ')}`
+                : deps.canInstall
+                    ? 'No hay nada que instalar'
+                    : 'Falta polkit (pkexec) para instalar automáticamente'
+        );
     };
 
     const refreshServiceState = async () => {
@@ -109,6 +162,9 @@ $(document).ready(function () {
             const isWayland = String(state.sessionType || '').toLowerCase() === 'wayland';
             $applyFix.prop('disabled', state?.platform !== 'linux');
 
+            renderDependencies(state?.dependencies || {});
+            $autoInstallDeps.prop('checked', Boolean(state?.autoInstallDeps));
+
             const inputControl = state?.inputControl || {};
             const showWaylandControls = Boolean(inputControl.waylandExperimentalAvailable);
             $waylandRow.toggle(showWaylandControls);
@@ -116,11 +172,17 @@ $(document).ready(function () {
 
             if (showWaylandControls) {
                 const enabled = Boolean(inputControl.waylandExperimentalEnabled);
+                const backend = inputControl.backend || {};
+                const backendLabel = backend.backend === 'uinput'
+                    ? 'uinput (dispositivo virtual)'
+                    : backend.backend === 'xtest'
+                        ? 'XTest (X11)'
+                        : 'no disponible';
                 $waylandToggle.prop('checked', enabled);
                 $waylandStatus.text(
-                    enabled
-                        ? 'Modo Wayland experimental activado.'
-                        : 'Modo Wayland experimental desactivado.'
+                    `Backend de entrada: ${backendLabel}. ${enabled
+                        ? 'Control remoto habilitado.'
+                        : 'Control remoto deshabilitado en Wayland.'}`
                 );
             }
 
@@ -267,6 +329,74 @@ $(document).ready(function () {
         renderChecks(response.checks || []);
         latestCommands = response.recommendedCommands || [];
         $diagMessage.text(response.message || 'Sin diagnóstico disponible.');
+    });
+
+    api.on('dependencies:changed', (status) => {
+        renderDependencies(status || {});
+    });
+
+    $('#refresh-deps').on('click', async () => {
+        const status = await api.invoke('service:getDependencies');
+        renderDependencies(status || {});
+    });
+
+    $autoInstallDeps.on('change', async function () {
+        const enabled = $(this).is(':checked');
+        $autoInstallDeps.prop('disabled', true);
+        try {
+            await api.invoke('service:setAutoInstallDeps', { enabled });
+        } catch (error) {
+            $autoInstallDeps.prop('checked', !enabled);
+            Swal.fire({ icon: 'error', title: 'No se pudo actualizar', text: error.message || 'Error al guardar la preferencia.' });
+        } finally {
+            $autoInstallDeps.prop('disabled', false);
+        }
+    });
+
+    $installDeps.on('click', async () => {
+        const confirmed = await Swal.fire({
+            icon: 'question',
+            title: 'Instalar dependencias',
+            text: 'Se pedirá la contraseña de administrador para instalar los paquetes que falten con el gestor de tu distribución.',
+            showCancelButton: true,
+            confirmButtonText: 'Instalar',
+            cancelButtonText: 'Cancelar'
+        });
+        if (!confirmed.isConfirmed) {
+            return;
+        }
+
+        $installDeps.prop('disabled', true);
+        Swal.fire({
+            title: 'Instalando...',
+            text: 'No cierres la ventana de permisos.',
+            allowOutsideClick: false,
+            didOpen: () => Swal.showLoading()
+        });
+
+        try {
+            const result = await api.invoke('service:installDependencies');
+            renderDependencies(result.status || {});
+            Swal.fire({
+                icon: result.ok || !result.remaining?.length ? 'success' : 'warning',
+                title: 'Dependencias',
+                text: result.message || 'Proceso terminado.'
+            });
+        } catch (error) {
+            Swal.fire({ icon: 'error', title: 'No se pudieron instalar', text: error.message || 'Error al instalar dependencias.' });
+        } finally {
+            $installDeps.prop('disabled', false);
+        }
+    });
+
+    $('#show-deps-command').on('click', async () => {
+        const { command } = await api.invoke('service:getDependencyCommand');
+        await Swal.fire({
+            icon: 'info',
+            title: 'Comando manual',
+            text: command || 'No hay nada que instalar o no se detectó un gestor de paquetes compatible.',
+            confirmButtonText: 'Cerrar'
+        });
     });
 
     $waylandToggle.on('change', async function () {

@@ -1,56 +1,64 @@
 #!/usr/bin/env bash
-# Launcher de Remote Controllers (AppImage) con compatibilidad para COSMIC y Wayland.
+# Launcher de Remote Controllers (AppImage desempaquetado) con soporte
+# Wayland y X11.
 #
-# Resuelve los fallos más comunes al arrancar en COSMIC / sesiones Wayland:
-#   1. Wayland nativo (Ozone) con fallback a X11: --ozone-platform-hint=auto
-#   2. FUSE no disponible (libfuse2) -> extrae y ejecuta el AppImage
-#   3. Sandbox de Chromium bloqueado (AppArmor/namespaces) -> reintenta con --no-sandbox
+# Wayland cubierto: Hyprland, Sway/wlroots, KDE Plasma, GNOME, COSMIC.
+#
+# El paquete pacman NO usa FUSE: el AppImage se descomprime en
+# /opt/remotecontrollers durante el build del paquete.
+#
+# Fallbacks automáticos:
+#   - Sandbox de Chromium bloqueado (AppArmor/namespaces) -> --no-sandbox
+#   - Falta el runtime del AppImage -> se avisa en el log
 # Todos los errores quedan registrados en un log para poder diagnosticar.
 
-APPIMAGE="/opt/remotecontrollers/remotecontrollers.AppImage"
+APP_DIR="/opt/remotecontrollers"
+APP_BIN="$APP_DIR/AppRun"
 LOG_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/remotecontrollers"
 mkdir -p "$LOG_DIR"
 ERR_LOG="$LOG_DIR/launcher.log"
 
-if [[ ! -x "$APPIMAGE" ]]; then
-    echo "remotecontrollers: no se encontró el AppImage en $APPIMAGE" >&2
+if [[ ! -x "$APP_BIN" ]]; then
+    echo "remotecontrollers: no se encontró $APP_BIN (reinstala el paquete)" >&2
     exit 1
 fi
 
 FLAGS=(
-    "--ozone-platform-hint=auto"
-    "--enable-features=WaylandWindowDecorations"
+    "--gtk-version=3"
 )
 
-launch() { # $1 = extract-and-run (1|0); resto = flags extra
-    local extract="$1"
-    shift
+IS_WAYLAND=0
+if [[ "${XDG_SESSION_TYPE:-}" == "wayland" || -n "${WAYLAND_DISPLAY:-}" ]]; then
+    IS_WAYLAND=1
+fi
+
+if [[ $IS_WAYLAND -eq 1 ]]; then
+    # Hyprland / Sway / KDE / GNOME / COSMIC: Ozone elige Wayland cuando existe
+    # y cae solo a XWayland si el compositor no lo soporta.
+    FLAGS+=(
+        "--ozone-platform-hint=auto"
+        "--enable-features=WaylandWindowDecorations"
+    )
+    export ELECTRON_OZONE_PLATFORM_HINT=auto
+fi
+
+launch() { # resto = flags extra
     : > "$ERR_LOG"
-    if [[ "$extract" == "1" ]]; then
-        APPIMAGE_EXTRACT_AND_RUN=1 "$APPIMAGE" "${FLAGS[@]}" "$@" >>"$ERR_LOG" 2>&1
-    else
-        APPIMAGE_EXTRACT_AND_RUN=0 "$APPIMAGE" "${FLAGS[@]}" "$@" >>"$ERR_LOG" 2>&1
-    fi
+    "$APP_BIN" "${FLAGS[@]}" "$@" >>"$ERR_LOG" 2>&1
 }
 
-# 1er intento: montaje FUSE normal y sandbox activo.
-launch 0 "$@"
+# 1er intento: sandbox activo.
+launch "$@"
 status=$?
 [[ $status -eq 0 ]] && exit 0
 
-# Fallback 1: FUSE no disponible -> extraer el AppImage y ejecutar.
-if grep -qiE "libfuse|fuse\.so|AppImages require FUSE" "$ERR_LOG"; then
-    launch 1 "$@"
-    status=$?
-    [[ $status -eq 0 ]] && exit 0
-fi
-
-# Fallback 2: sandbox de Chromium bloqueado -> desactivarlo.
+# Fallback: sandbox de Chromium bloqueado -> desactivarlo.
 if grep -qiE "sandbox|setuid_sandbox|user namespace" "$ERR_LOG"; then
-    launch 1 --no-sandbox "$@"
+    launch --no-sandbox "$@"
     status=$?
     [[ $status -eq 0 ]] && exit 0
 fi
 
 echo "remotecontrollers: no se pudo iniciar. Revisa el log: $ERR_LOG" >&2
 exit "$status"
+

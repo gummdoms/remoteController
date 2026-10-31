@@ -1,11 +1,32 @@
+const REQUEST_TIMEOUT_MS = Number(process.env.CLOUD_REQUEST_TIMEOUT_MS || 20000);
+
 async function cloudFetch(serverUrl, path, options = {}) {
     const base = String(serverUrl || '').replace(/\/$/, '');
-    const response = await fetch(`${base}${path}`, options);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+    let response;
+    try {
+        response = await fetch(`${base}${path}`, { ...options, signal: controller.signal });
+    } catch (error) {
+        const wrapped = new Error(
+            error.name === 'AbortError'
+                ? 'El servidor cloud no respondió a tiempo.'
+                : `No se pudo contactar el servidor cloud: ${error.message}`
+        );
+        wrapped.status = 0;
+        wrapped.network = true;
+        throw wrapped;
+    } finally {
+        clearTimeout(timeout);
+    }
+
     const data = await response.json().catch(() => ({}));
 
     if (!response.ok) {
         const error = new Error(data.error || `Error HTTP ${response.status}`);
         error.status = response.status;
+        error.network = response.status >= 500;
         throw error;
     }
 
@@ -32,6 +53,18 @@ async function register(serverUrl, { email, password, name }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password, name })
+    });
+}
+
+/**
+ * Renueva la sesión. El servidor puede responder con un token nuevo
+ * (`token` y opcionalmente `refreshToken`).
+ */
+async function refresh(serverUrl, refreshToken) {
+    return cloudFetch(serverUrl, '/api/auth/refresh', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken })
     });
 }
 
@@ -63,6 +96,7 @@ async function updateDeviceName(serverUrl, token, deviceId, name) {
 module.exports = {
     login,
     register,
+    refresh,
     me,
     registerDevice,
     updateDeviceName
