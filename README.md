@@ -416,10 +416,14 @@ Soluciones (de más simple a más compleja):
 2. **Cloudflare R2**: subir los binarios pesados con la API S3 (admite hasta
    5 GiB por PUT) y servir el repositorio desde un dominio propio.
 3. **Tailscale** (configurado): el runner entra en la tailnet con
-   `tailscale/github-action` (`--ephemeral`) usando el secret `TS_AUTHKEY`, y el
-   workflow pone solo `DATA_LAKE_UPLOAD_URL=http://100.105.212.100:30001`
-   (servidor `server-prod`). Las descargas siguen por Cloudflare; solo la subida
-   va por la tailnet.
+   `tailscale/github-action` usando el secret `TS_AUTHKEY`, y el workflow pone
+   solo `DATA_LAKE_UPLOAD_URL=http://100.105.212.100:30001` (servidor
+   `server-prod`). Las descargas siguen por Cloudflare; solo la subida va por la
+   tailnet.
+
+   La auth key debe crearse en el panel de Tailscale con la casilla
+   **Ephemeral** marcada (así el nodo desaparece solo al terminar el job); no se
+   pasa `--ephemeral` por CLI porque `tailscale up` no acepta ese flag.
 
    Comprobado: 105 MB subidos en ~7 s por esa IP, sin `413`. No hace falta
    exponer el origen a Internet.

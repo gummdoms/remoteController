@@ -286,21 +286,30 @@ jobs:
                     echo "tailscale=false" >> "$GITHUB_OUTPUT"
                   fi
 
-                  # Host de subida: 1) secret explícito, 2) IP de Tailscale, 3) el público.
-                  if [[ -n "${DATA_LAKE_UPLOAD_URL}" ]]; then
-                    echo "DATA_LAKE_UPLOAD_URL=${DATA_LAKE_UPLOAD_URL}" >> "$GITHUB_ENV"
-                  elif [[ -n "${TS_AUTHKEY}" ]]; then
-                    echo "DATA_LAKE_UPLOAD_URL=http://100.105.212.100:30001" >> "$GITHUB_ENV"
-                  fi
-
             - name: Join Tailscale for data lake upload
+              id: ts
               if: steps.lake.outputs.configured == 'true' && steps.lake.outputs.tailscale == 'true'
               continue-on-error: true
               uses: tailscale/github-action@v2
               with:
-                  # Nodo efímero: desaparece de la tailnet al terminar el job.
+                  # El nodo es efímero si la auth key se creó con la casilla
+                  # "Ephemeral" marcada (no existe la opción `--ephemeral`
+                  # en `tailscale up`).
                   authkey: ${{ secrets.TS_AUTHKEY }}
-                  args: --ephemeral --hostname=rc-ci-${{ github.run_id }}
+                  args: --hostname=rc-ci-${{ github.run_id }}
+
+            - name: Configure upload host over Tailscale
+              if: steps.ts.outcome == 'success'
+              env:
+                  CONFIGURED_UPLOAD_URL: ${{ secrets.DATA_LAKE_UPLOAD_URL }}
+              run: |
+                  # 1) secret explícito, 2) IP del servidor en la tailnet.
+                  if [[ -n "${CONFIGURED_UPLOAD_URL}" ]]; then
+                    echo "DATA_LAKE_UPLOAD_URL=${CONFIGURED_UPLOAD_URL}" >> "$GITHUB_ENV"
+                  else
+                    echo "DATA_LAKE_UPLOAD_URL=http://100.105.212.100:30001" >> "$GITHUB_ENV"
+                  fi
+                  tailscale status || true
 
             - name: Publish GitHub Release
               uses: softprops/action-gh-release@v2
