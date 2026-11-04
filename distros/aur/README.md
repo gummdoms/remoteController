@@ -28,8 +28,9 @@ bash distros/aur/publish-aur.sh --push
 
 El script:
 
-1. Copia `remotecontrollers.desktop`, `remotecontrollers.sh` y
-   `remotecontrollers.install` desde `distros/archlinux/` (fuente única).
+1. Copia `remotecontrollers.desktop` y `remotecontrollers.sh` desde
+   `distros/common/`, y `remotecontrollers.install` desde `distros/archlinux/`
+   (fuente única).
 2. Sincroniza `pkgver` con `package.json`.
 3. Ejecuta `updpkgsums` para que `sha256sums` sea real (AUR no admite `SKIP`).
 4. Genera `.SRCINFO` con `makepkg --printsrcinfo`.

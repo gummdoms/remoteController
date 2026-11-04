@@ -10,7 +10,6 @@ DEFS_Debug := \
 	'-D_GLIBCXX_USE_CXX11_ABI=1' \
 	'-D_FILE_OFFSET_BITS=64' \
 	'-D_LARGEFILE_SOURCE' \
-	'-DV8_ENABLE_WEBASSEMBLY' \
 	'-D__STDC_FORMAT_MACROS' \
 	'-DOPENSSL_NO_PINSHARED' \
 	'-DOPENSSL_THREADS' \
@@ -42,13 +41,13 @@ CFLAGS_CC_Debug := \
 	-std=c++17
 
 INCS_Debug := \
-	-I/home/bjrzum/.cache/node-gyp/24.22.0/include/node \
-	-I/home/bjrzum/.cache/node-gyp/24.22.0/src \
-	-I/home/bjrzum/.cache/node-gyp/24.22.0/deps/openssl/config \
-	-I/home/bjrzum/.cache/node-gyp/24.22.0/deps/openssl/openssl/include \
-	-I/home/bjrzum/.cache/node-gyp/24.22.0/deps/uv/include \
-	-I/home/bjrzum/.cache/node-gyp/24.22.0/deps/zlib \
-	-I/home/bjrzum/.cache/node-gyp/24.22.0/deps/v8/include \
+	-I/home/bjrzum/.cache/node-gyp/26.13.0/include/node \
+	-I/home/bjrzum/.cache/node-gyp/26.13.0/src \
+	-I/home/bjrzum/.cache/node-gyp/26.13.0/deps/openssl/config \
+	-I/home/bjrzum/.cache/node-gyp/26.13.0/deps/openssl/openssl/include \
+	-I/home/bjrzum/.cache/node-gyp/26.13.0/deps/uv/include \
+	-I/home/bjrzum/.cache/node-gyp/26.13.0/deps/zlib \
+	-I/home/bjrzum/.cache/node-gyp/26.13.0/deps/v8/include \
 	-I$(srcdir)/node_modules/node-addon-api
 
 DEFS_Release := \
@@ -59,7 +58,6 @@ DEFS_Release := \
 	'-D_GLIBCXX_USE_CXX11_ABI=1' \
 	'-D_FILE_OFFSET_BITS=64' \
 	'-D_LARGEFILE_SOURCE' \
-	'-DV8_ENABLE_WEBASSEMBLY' \
 	'-D__STDC_FORMAT_MACROS' \
 	'-DOPENSSL_NO_PINSHARED' \
 	'-DOPENSSL_THREADS' \
@@ -89,13 +87,13 @@ CFLAGS_CC_Release := \
 	-std=c++17
 
 INCS_Release := \
-	-I/home/bjrzum/.cache/node-gyp/24.22.0/include/node \
-	-I/home/bjrzum/.cache/node-gyp/24.22.0/src \
-	-I/home/bjrzum/.cache/node-gyp/24.22.0/deps/openssl/config \
-	-I/home/bjrzum/.cache/node-gyp/24.22.0/deps/openssl/openssl/include \
-	-I/home/bjrzum/.cache/node-gyp/24.22.0/deps/uv/include \
-	-I/home/bjrzum/.cache/node-gyp/24.22.0/deps/zlib \
-	-I/home/bjrzum/.cache/node-gyp/24.22.0/deps/v8/include \
+	-I/home/bjrzum/.cache/node-gyp/26.13.0/include/node \
+	-I/home/bjrzum/.cache/node-gyp/26.13.0/src \
+	-I/home/bjrzum/.cache/node-gyp/26.13.0/deps/openssl/config \
+	-I/home/bjrzum/.cache/node-gyp/26.13.0/deps/openssl/openssl/include \
+	-I/home/bjrzum/.cache/node-gyp/26.13.0/deps/uv/include \
+	-I/home/bjrzum/.cache/node-gyp/26.13.0/deps/zlib \
+	-I/home/bjrzum/.cache/node-gyp/26.13.0/deps/v8/include \
 	-I$(srcdir)/node_modules/node-addon-api
 
 OBJS := \

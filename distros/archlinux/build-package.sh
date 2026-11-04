@@ -5,6 +5,8 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 DISTRO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Launcher y entrada de menú se comparten con el paquete .deb (distros/common).
+COMMON_DIR="$ROOT_DIR/distros/common"
 DIST_DIR="$ROOT_DIR/dist"
 PKGROOT="$DIST_DIR/arch-pkg"
 VERSION="$(node -p "require('$ROOT_DIR/package.json').version")"
@@ -43,8 +45,8 @@ mkdir -p "$PKGROOT"
 
 cp -f "$APPIMAGE" "$PKGROOT/remotecontrollers.AppImage"
 cp -f "$ROOT_DIR/assets/icon.png" "$PKGROOT/remotecontrollers.png"
-cp -f "$DISTRO_DIR/remotecontrollers.desktop" "$PKGROOT/remotecontrollers.desktop"
-cp -f "$DISTRO_DIR/remotecontrollers.sh" "$PKGROOT/remotecontrollers.sh"
+cp -f "$COMMON_DIR/remotecontrollers.desktop" "$PKGROOT/remotecontrollers.desktop"
+cp -f "$COMMON_DIR/remotecontrollers.sh" "$PKGROOT/remotecontrollers.sh"
 cp -f "$DISTRO_DIR/remotecontrollers.install" "$PKGROOT/remotecontrollers.install"
 cp -f "$DISTRO_DIR/PKGBUILD" "$PKGROOT/PKGBUILD"
 chmod +x "$PKGROOT/remotecontrollers.sh"

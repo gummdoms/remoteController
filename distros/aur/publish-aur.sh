@@ -13,6 +13,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 AUR_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ARCH_DIR="$ROOT_DIR/distros/archlinux"
+COMMON_DIR="$ROOT_DIR/distros/common"
 VERSION="$(node -p "require('$ROOT_DIR/package.json').version")"
 
 if ! command -v makepkg >/dev/null 2>&1; then
@@ -22,10 +23,10 @@ fi
 
 echo ">> Versión: $VERSION"
 
-# Los archivos auxiliares se mantienen en distros/archlinux y se copian aquí
-# para que el repositorio AUR sea autocontenido.
-cp -f "$ARCH_DIR/remotecontrollers.desktop" "$AUR_DIR/"
-cp -f "$ARCH_DIR/remotecontrollers.sh" "$AUR_DIR/"
+# Los archivos auxiliares se mantienen en el repositorio (launcher y .desktop
+# en distros/common) y se copian aquí para que el AUR sea autocontenido.
+cp -f "$COMMON_DIR/remotecontrollers.desktop" "$AUR_DIR/"
+cp -f "$COMMON_DIR/remotecontrollers.sh" "$AUR_DIR/"
 cp -f "$ARCH_DIR/remotecontrollers.install" "$AUR_DIR/"
 chmod +x "$AUR_DIR/remotecontrollers.sh"
 

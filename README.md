@@ -120,6 +120,64 @@ Descarga el `.pkg.tar.zst` desde [Releases](https://github.com/gummdoms/remoteCo
 
 ---
 
+### Debian / Ubuntu (.deb)
+
+Compatible con **Debian 12 y 13** (y posteriores) y **Ubuntu 22.04, 24.04, 24.10, 25.04, 25.10, 26.04, 26.10…** (amd64).
+
+**Opción A — GitHub Releases (recomendado)**
+
+1. Abre [Releases en GitHub](https://github.com/gummdoms/remoteController/releases)
+2. Descarga `remotecontrollers_<versión>-1_amd64.deb`
+3. Instálalo (apt resuelve e instala las dependencias):
+
+```bash
+sudo apt install ./remotecontrollers_*_amd64.deb
+```
+
+**Opción B — Lago de datos**
+
+```bash
+wget https://datalake.dambra-os.com/public/remote-controller/releases/debian/remotecontrollers_1.0.8-1_amd64.deb
+sudo apt install ./remotecontrollers_1.0.8-1_amd64.deb
+```
+
+**Opción C — Paquete local compilado por ti**
+
+```bash
+npm run dist:deb
+sudo apt install ./dist/remotecontrollers_*_amd64.deb
+```
+
+> Usa siempre `apt install ./archivo.deb` (con `./`) para que apt resuelva las
+> dependencias; `dpkg -i` por sí solo no las instala.
+
+Después de instalar, cierra sesión y vuelve a entrar para aplicar los grupos y
+abre **Remote Controllers** desde el menú o ejecuta:
+
+```bash
+remotecontrollers
+```
+
+El paquete:
+
+- **No necesita FUSE ni `libfuse2`**: el AppImage va desempaquetado en
+  `/opt/remotecontrollers`.
+- Instala `chrome-sandbox` con **setuid root**, así que el sandbox de Chromium
+  funciona incluso con la restricción de *user namespaces* de Ubuntu 23.10+.
+- Declara sus dependencias en `Depends` (con alternativas `| …t64` para
+  Ubuntu 24.04+ y Debian 13): `libgtk-3-0`, `libnss3`, `libgbm1`, `libasound2`,
+  `ddcutil`, `x11-xserver-utils`, `pkexec`, `xdg-utils`…
+- Configura `/dev/uinput` (regla udev + módulo al arrancar) y añade al usuario a
+  los grupos `input`, `uinput`, `video` e `i2c` desde el `postinst`.
+
+Actualizar = instalar el `.deb` nuevo:
+
+```bash
+sudo apt install ./remotecontrollers_<nueva-versión>-1_amd64.deb
+```
+
+---
+
 ### Otras distribuciones Linux (AppImage)
 
 **1. Descarga** el AppImage desde [GitHub Releases](https://github.com/gummdoms/remoteController/releases) o desde:
@@ -214,6 +272,8 @@ puede instalarlas sola, según la distribución y el escritorio:
 
 - En **Arch** el paquete declara las dependencias en `depends`, así que pacman las
   instala al instalar el paquete.
+- En **Debian/Ubuntu** el `.deb` las declara en `Depends`, así que
+  `apt install ./remotecontrollers_*_amd64.deb` lo deja todo listo.
 - En **AppImage** o en otras distribuciones, la app detecta el gestor
   (`pacman`, `apt`, `dnf`, `zypper`, `apk`) y ofrece **«Instalar dependencias
   faltantes»** con un diálogo `pkexec`. También puedes activar
@@ -251,6 +311,8 @@ npm run start:prod     # contra https://remote-controller.bjrsoftware.uk
 | `npm run start:prod` | Electron contra cloud de producción |
 | `npm run dist:win` | Genera instalador `.exe` |
 | `npm run dist:linux` | Genera AppImage |
+| `npm run dist:deb` | Genera `.deb` para Debian/Ubuntu |
+| `npm run dist:deb:release` | Build `.deb` + subida al lago de datos |
 | `npm run dist:arch:pkg` | Genera `.pkg.tar.zst` para Arch |
 | `npm run dist:arch:release` | Build Arch + índice pacman + subida al lago de datos |
 | `npm run dist:release:upload` | Sube exe, AppImage y paquetes al lago de datos |
@@ -263,7 +325,7 @@ Los artefactos se publican en **dos canales**:
 
 | Canal | Uso |
 |-------|-----|
-| [GitHub Releases](https://github.com/gummdoms/remoteController/releases) | CI automático en cada push a `main` (`.exe`, AppImage, `.pkg`) |
+| [GitHub Releases](https://github.com/gummdoms/remoteController/releases) | CI automático en cada push a `main` (`.exe`, AppImage, `.pkg`, `.deb`) |
 | **Lago de datos** | Descargas públicas en `public/remote-controller/releases/` |
 
 ### Estructura en el lago de datos
@@ -272,6 +334,7 @@ Los artefactos se publican en **dos canales**:
 public/remote-controller/releases/
 ├── windows/          # Instalador NSIS (.exe)
 ├── linux/            # AppImage
+├── debian/           # Paquete .deb (Debian / Ubuntu)
 └── arch/x86_64/      # Repo pacman (pkg + bjrsoftware.db + bjrsoftware.files)
 ```
 
@@ -481,7 +544,27 @@ La latencia depende de la red hasta el servidor cloud. Ajusta sensibilidad en **
 
 ---
 
-## Archivos en `distros/archlinux/`
+## Archivos en `distros/`
+
+**`distros/common/`** — compartidos por todos los paquetes Linux:
+
+| Archivo | Función |
+|---------|---------|
+| `remotecontrollers.sh` | Launcher del AppImage empaquetado (Wayland/X11, fallback `--no-sandbox`) |
+| `remotecontrollers.desktop` | Entrada de menú |
+
+**`distros/debian/`** — paquete `.deb` (Debian/Ubuntu):
+
+| Archivo | Función |
+|---------|---------|
+| `build-deb.sh` | AppImage → `.deb` en `dist/` |
+| `release.sh` | Build + subida al lago de datos |
+| `remotecontrollers.postinst` | Crea grupo `uinput`, recarga udev y añade el usuario a los grupos |
+| `remotecontrollers-uinput.rules` | Regla udev de `/dev/uinput` (grupo `uinput` + `uaccess`) |
+| `remotecontrollers-uinput.conf` | Carga el módulo `uinput` al arrancar |
+| `copyright` | Metadatos de licencia para `/usr/share/doc` |
+
+**`distros/archlinux/`** — paquete pacman:
 
 | Archivo | Función |
 |---------|---------|
@@ -491,8 +574,7 @@ La latencia depende de la red hasta el servidor cloud. Ajusta sensibilidad en **
 | `upload-datalake.sh` | Sube al lago de datos |
 | `release.sh` | Build + publish + upload (flujo completo) |
 | `bjrsoftware.repo` | Bloque para `/etc/pacman.conf` |
-| `remotecontrollers.desktop` | Entrada de menú |
-| `remotecontrollers.sh` | Launcher del AppImage empaquetado |
+| `remotecontrollers.install` | Mensajes del paquete pacman |
 
 Documentación del servidor web: [remoteControllerWeb](../remoteControllerWeb/README.md)
 

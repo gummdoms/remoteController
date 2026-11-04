@@ -69,6 +69,7 @@ async function main() {
 
     await uploadIfExists(findArtifact(distDir, '\\.exe$'), 'releases/windows');
     await uploadIfExists(findArtifact(distDir, '\\.AppImage$'), 'releases/linux');
+    await uploadIfExists(findArtifact(distDir, '\\.deb$'), 'releases/debian');
     await uploadIfExists(findArtifact(distDir, '\\.pkg\\.tar\\.zst$'), 'releases/arch/x86_64');
 
     const uploadDir = path.join(distDir, 'datalake-upload');

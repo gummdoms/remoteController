@@ -1,0 +1,6 @@
+# Remote Controllers — acceso a /dev/uinput para el dispositivo virtual de
+# entrada (Wayland y X11).
+#
+# `static_node` crea el nodo aunque el módulo se cargue después; `uaccess`
+# concede acceso al usuario de la sesión activa sin tener que cerrar sesión.
+KERNEL=="uinput", SUBSYSTEM=="misc", MODE="0660", GROUP="uinput", TAG+="uaccess", OPTIONS+="static_node=uinput"

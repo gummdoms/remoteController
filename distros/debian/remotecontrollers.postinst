@@ -1,0 +1,63 @@
+#!/bin/bash
+# Post-instalación del paquete .deb de Remote Controllers.
+#
+# Deja listo /dev/uinput (grupo uinput + regla udev + módulo al arrancar) para
+# que el control de mouse/teclado funcione en Wayland y en X11 sin pasos
+# manuales. La regla udev usa TAG+="uaccess", así que el usuario de la sesión
+# gráfica recibe permisos incluso antes de volver a iniciar sesión.
+set -e
+
+if [ "$1" = "configure" ]; then
+    groupadd -f uinput >/dev/null 2>&1 || true
+    modprobe uinput >/dev/null 2>&1 || true
+
+    if command -v udevadm >/dev/null 2>&1; then
+        udevadm control --reload-rules >/dev/null 2>&1 || true
+        udevadm trigger --subsystem-match=misc --sysname-match=uinput >/dev/null 2>&1 || true
+    fi
+
+    # Usuario que lanzó la instalación (sudo) o el de la sesión gráfica.
+    TARGET_USER="${SUDO_USER:-}"
+    if [ -z "$TARGET_USER" ] || [ "$TARGET_USER" = "root" ]; then
+        TARGET_USER="$(logname 2>/dev/null || true)"
+    fi
+
+    if [ -n "$TARGET_USER" ] && [ "$TARGET_USER" != "root" ] && id "$TARGET_USER" >/dev/null 2>&1; then
+        for group in input uinput video i2c; do
+            if getent group "$group" >/dev/null 2>&1; then
+                usermod -aG "$group" "$TARGET_USER" >/dev/null 2>&1 || true
+            fi
+        done
+
+        cat <<EOF
+
+  Remote Controllers instalado.
+
+  Se añadió el usuario "$TARGET_USER" a los grupos input, uinput, video (e i2c
+  si existe) y se preparó /dev/uinput para el control de entrada en Wayland.
+
+  Cierra sesión y vuelve a entrar para aplicar los grupos. Después ejecuta:
+
+    remotecontrollers
+
+  O abre "Remote Controllers" desde el menú de aplicaciones.
+
+EOF
+    else
+        cat <<'EOF'
+
+  Remote Controllers instalado.
+
+  Para el control de mouse/teclado en Wayland hace falta acceso a /dev/uinput:
+
+    sudo groupadd -f uinput
+    sudo usermod -aG input,uinput,video,i2c "$USER"
+    # Cierra sesión y vuelve a entrar
+
+  Ejecuta:  remotecontrollers
+
+EOF
+    fi
+fi
+
+exit 0

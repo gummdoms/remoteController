@@ -1,9 +1,10 @@
 name: Build & Release
 
-# Compila y publica los tres artefactos:
+# Compila y publica los cuatro artefactos:
 #   - Windows  (instalador NSIS .exe)
 #   - Linux    (AppImage)
 #   - Arch     (paquete pacman .pkg.tar.zst + repositorio bjrsoftware.db)
+#   - Debian / Ubuntu (paquete .deb amd64)
 # Y los publica en GitHub Releases y, si hay secretos configurados, en el
 # data lake (https://datalake.dambra-os.com/public/remote-controller/releases/).
 
@@ -172,6 +173,53 @@ jobs:
                       dist/*.pkg.tar.zst
                       dist/datalake-upload/**
 
+    # ------------------------------------------------------- Debian / Ubuntu
+    # Reutiliza el AppImage ya compilado: el .deb lleva la app desempaquetada en
+    # /opt/remotecontrollers (sin FUSE) y declara las dependencias para que
+    # `apt install ./remotecontrollers_x.deb` no pida nada más.
+    build-debian-package:
+        if: github.actor != 'github-actions[bot]'
+        needs: build-linux-appimage
+        runs-on: ubuntu-22.04
+        timeout-minutes: 20
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: ${{ env.NODE_VERSION }}
+
+            - name: Download AppImage artifact
+              uses: actions/download-artifact@v4
+              with:
+                  name: linux-appimage
+                  path: dist
+
+            - name: Build Debian package
+              run: npm run dist:deb
+
+            - name: Inspect Debian package
+              run: |
+                  set -euo pipefail
+                  DEB=$(ls dist/*.deb | head -1)
+                  dpkg-deb --info "$DEB"
+                  dpkg-deb --contents "$DEB" | sed -n '1,30p'
+                  {
+                    echo "### Paquete .deb"
+                    echo ""
+                    echo "- \`$(basename "$DEB")\` ($(du -h "$DEB" | cut -f1))"
+                  } >> "$GITHUB_STEP_SUMMARY"
+
+            - name: Upload Debian package
+              uses: actions/upload-artifact@v4
+              with:
+                  name: debian-package
+                  if-no-files-found: error
+                  retention-days: 7
+                  path: dist/*.deb
+
     # ------------------------------------------------------------- Release
     publish:
         if: |
@@ -179,7 +227,7 @@ jobs:
             needs.build-windows.result == 'success' &&
             needs.build-linux-appimage.result == 'success' &&
             (github.event_name != 'workflow_dispatch' || inputs.publish_github_release)
-        needs: [build-windows, build-linux-appimage, build-arch-package]
+        needs: [build-windows, build-linux-appimage, build-arch-package, build-debian-package]
         runs-on: ubuntu-latest
         timeout-minutes: 20
         steps:
@@ -204,6 +252,13 @@ jobs:
               with:
                   name: archlinux-package
                   path: release-assets/archlinux-package
+
+            - name: Download Debian artifact
+              if: needs.build-debian-package.result == 'success'
+              uses: actions/download-artifact@v4
+              with:
+                  name: debian-package
+                  path: release-assets/debian
 
             - name: Prepare release assets
               run: |
@@ -256,6 +311,12 @@ jobs:
                     echo "- Windows: \`Remote Controllers Setup ${{ steps.meta.outputs.version }}.exe\`"
                     echo "- Linux: \`Remote Controllers-${{ steps.meta.outputs.version }}.AppImage\`"
                     echo "- Arch Linux: \`remotecontrollers-bin-${{ steps.meta.outputs.version }}-x86_64.pkg.tar.zst\`"
+                    echo "- Debian / Ubuntu: \`remotecontrollers_${{ steps.meta.outputs.version }}-1_amd64.deb\`"
+                    echo ""
+                    echo "### Instalación en Debian / Ubuntu"
+                    echo '```bash'
+                    echo "sudo apt install ./remotecontrollers_*_amd64.deb"
+                    echo '```'
                     echo ""
                     echo "### Instalación en Arch"
                     echo '```bash'
@@ -326,6 +387,7 @@ jobs:
                       release-assets/windows-installer/*.exe
                       release-assets/linux-appimage/*.AppImage
                       release-assets/arch/*.pkg.tar.zst
+                      release-assets/debian/*.deb
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -364,6 +426,22 @@ jobs:
                     fi
                   done
 
+                  {
+                    echo ""
+                    echo "### Paquete Debian / Ubuntu"
+                    echo ""
+                  } >> "$GITHUB_STEP_SUMMARY"
+                  DEB_FILE=$(ls release-assets/debian/*.deb 2>/dev/null | head -1 | xargs -r basename || true)
+                  if [[ -n "${DEB_FILE:-}" ]]; then
+                    CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/debian/$DEB_FILE" || echo "000")
+                    echo "- \`$CODE\` $BASE/debian/$DEB_FILE" | tee -a "$GITHUB_STEP_SUMMARY"
+                    if [[ "$CODE" != "200" ]]; then
+                      echo "::warning title=Data lake::$BASE/debian/$DEB_FILE respondió $CODE"
+                    fi
+                  else
+                    echo "- _Sin paquete .deb en esta ejecución_" | tee -a "$GITHUB_STEP_SUMMARY"
+                  fi
+
             - name: Warn if Arch package is missing
               if: needs.build-arch-package.result != 'success'
               run: |
@@ -374,12 +452,22 @@ jobs:
                     echo "⚠️ El paquete Arch falló; los usuarios de Arch no recibirán actualización."
                   } >> "$GITHUB_STEP_SUMMARY"
 
+            - name: Warn if Debian package is missing
+              if: needs.build-debian-package.result != 'success'
+              run: |
+                  echo "::warning title=Paquete .deb::No se generó el paquete Debian/Ubuntu en esta ejecución."
+                  {
+                    echo "### Paquete Debian / Ubuntu"
+                    echo ""
+                    echo "⚠️ El paquete .deb falló; los usuarios de Debian/Ubuntu no recibirán actualización."
+                  } >> "$GITHUB_STEP_SUMMARY"
+
     # Aviso explícito si algún artefacto no se pudo construir.
     notify-failure:
         if: |
             always() &&
             contains(needs.*.result, 'failure')
-        needs: [build-windows, build-linux-appimage, build-arch-package]
+        needs: [build-windows, build-linux-appimage, build-arch-package, build-debian-package]
         runs-on: ubuntu-latest
         steps:
             - name: Resumen del fallo
@@ -391,4 +479,5 @@ jobs:
                   echo "| windows | ${{ needs.build-windows.result }} |" >> "$GITHUB_STEP_SUMMARY"
                   echo "| linux-appimage | ${{ needs.build-linux-appimage.result }} |" >> "$GITHUB_STEP_SUMMARY"
                   echo "| arch-package | ${{ needs.build-arch-package.result }} |" >> "$GITHUB_STEP_SUMMARY"
+                  echo "| debian-package | ${{ needs.build-debian-package.result }} |" >> "$GITHUB_STEP_SUMMARY"
                   exit 1

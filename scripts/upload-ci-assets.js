@@ -98,6 +98,7 @@ async function main() {
 
     const windowsDir = resolveDir(assetsRoot, ['windows', 'windows-installer']);
     const linuxDir = resolveDir(assetsRoot, ['linux', 'linux-appimage']);
+    const debianDir = resolveDir(assetsRoot, ['debian', 'debian-package']);
     const archDir = resolveDir(assetsRoot, ['arch', 'archlinux-package']);
     const archRepoDir = archDir ? resolveDir(archDir, ['repo', 'datalake-upload']) : null;
 
@@ -110,6 +111,7 @@ async function main() {
 
     uploaded += await uploadFiles(listFiles(windowsDir), 'releases/windows', releasesBase, failures);
     uploaded += await uploadFiles(listFiles(linuxDir), 'releases/linux', releasesBase, failures);
+    uploaded += await uploadFiles(listFiles(debianDir), 'releases/debian', releasesBase, failures);
 
     // El índice pacman (bjrsoftware.db) solo tiene sentido si el paquete está
     // publicado: si el .pkg falla, se omite el índice para no dejar un
