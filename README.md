@@ -360,10 +360,42 @@ DATA_LAKE_UPLOAD_URL=            # opcional: host sin Cloudflare para >100 MB
 DATA_LAKE_USER=tu_usuario
 DATA_LAKE_PASSWORD=tu_password
 DATA_LAKE_STORAGE_PATH=public/remote-controller
+RELEASES_BASE=https://datalake.dambra-os.com/public/remote-controller/releases
 ```
+
+Sustituye el dominio por el real (por ejemplo `https://datalake.damnova.com`).
 
 `DATA_LAKE_URL` se usa para las URLs públicas. `DATA_LAKE_UPLOAD_URL` se usa
 solo para **subir** (útil si el binario supera el límite de Cloudflare).
+
+#### Credenciales en GitHub Actions
+
+Cada valor se lee **primero de *Repository variables* y, si no existe, de
+*Repository secrets*** (`Settings → Secrets and variables → Actions`), así que
+puedes configurarlas en cualquiera de las dos pestañas:
+
+| Nombre | Obligatoria | Uso |
+|--------|-------------|-----|
+| `DATA_LAKE_URL` | sí | URL pública del lago de datos |
+| `DATA_LAKE_USER` | sí | Usuario |
+| `DATA_LAKE_PASSWORD` | sí | Contraseña (mejor como *secret*) |
+| `DATA_LAKE_UPLOAD_URL` | no | Host de subida sin Cloudflare |
+| `DATA_LAKE_STORAGE_PATH` | no | Prefijo de almacenamiento |
+| `RELEASES_BASE` | no | Base pública para verificar descargas |
+| `TS_AUTHKEY` | no | Auth key de Tailscale (crear con *Ephemeral*) |
+| `DATA_LAKE_TAILSCALE_HOST` | no | Host a usar si solo hay Tailscale |
+
+**Prioridad del host de subida** (el workflow lo escribe en el resumen del job):
+
+1. `DATA_LAKE_UPLOAD_URL` — si está definido se usa **tal cual**, nunca se
+   sustituye por la IP por defecto.
+2. Tailscale — `DATA_LAKE_TAILSCALE_HOST` o, si no existe,
+   `http://100.105.212.100:30001` (solo cuando el runner se unió a la tailnet).
+3. `DATA_LAKE_URL` — subida directa por Cloudflare.
+
+El paso **Check data lake credentials** añade al *job summary* una tabla con qué
+variables están definidas y cuáles están vacías, para detectar de un vistazo si
+el valor se puso en la pestaña equivocada.
 
 ### Flujo Arch Linux (pacman)
 
@@ -396,13 +428,14 @@ bjrsoftware.db.tar.zst   bjrsoftware.files.tar.zst
 Si falta `bjrsoftware.db` en la URL del repositorio, `pacman -Sy` falla con
 *404*: significa que el índice nunca se subió (no que el servidor esté mal).
 
-### Subir todos los artefactos (Windows + Linux + Arch)
+### Subir todos los artefactos (Windows + Linux + Debian + Arch)
 
 Tras compilar localmente o descargar artefactos de CI:
 
 ```bash
 npm run dist:win
 npm run dist:linux
+npm run dist:deb
 npm run dist:arch:pkg
 npm run dist:arch:publish
 npm run dist:release:upload

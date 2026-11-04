@@ -140,7 +140,7 @@ jobs:
                   pacman-key --init
                   pacman-key --populate archlinux
                   pacman -Syu --noconfirm --disable-download-timeout
-                  pacman -S --noconfirm --needed base-devel git nodejs npm sudo
+                  pacman -S --noconfirm --needed base-devel git nodejs npm sudo imagemagick
 
             - name: Checkout
               uses: actions/checkout@v4
@@ -196,6 +196,11 @@ jobs:
               with:
                   name: linux-appimage
                   path: dist
+
+            - name: Install icon tooling
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y --no-install-recommends imagemagick
 
             - name: Build Debian package
               run: npm run dist:deb
@@ -327,17 +332,37 @@ jobs:
             - name: Check data lake credentials
               id: lake
               env:
-                  DATA_LAKE_URL: ${{ secrets.DATA_LAKE_URL }}
-                  DATA_LAKE_UPLOAD_URL: ${{ secrets.DATA_LAKE_UPLOAD_URL }}
-                  DATA_LAKE_USER: ${{ secrets.DATA_LAKE_USER }}
-                  DATA_LAKE_PASSWORD: ${{ secrets.DATA_LAKE_PASSWORD }}
-                  TS_AUTHKEY: ${{ secrets.TS_AUTHKEY }}
+                  # Se aceptan tanto Repository secrets como Repository variables
+                  # (Settings -> Secrets and variables -> Actions). `vars` gana.
+                  DATA_LAKE_URL: ${{ vars.DATA_LAKE_URL || secrets.DATA_LAKE_URL }}
+                  DATA_LAKE_UPLOAD_URL: ${{ vars.DATA_LAKE_UPLOAD_URL || secrets.DATA_LAKE_UPLOAD_URL }}
+                  DATA_LAKE_USER: ${{ vars.DATA_LAKE_USER || secrets.DATA_LAKE_USER }}
+                  DATA_LAKE_PASSWORD: ${{ vars.DATA_LAKE_PASSWORD || secrets.DATA_LAKE_PASSWORD }}
+                  DATA_LAKE_STORAGE_PATH: ${{ vars.DATA_LAKE_STORAGE_PATH || secrets.DATA_LAKE_STORAGE_PATH }}
+                  RELEASES_BASE: ${{ vars.RELEASES_BASE || secrets.RELEASES_BASE }}
+                  TS_AUTHKEY: ${{ vars.TS_AUTHKEY || secrets.TS_AUTHKEY }}
+                  DATA_LAKE_TAILSCALE_HOST: ${{ vars.DATA_LAKE_TAILSCALE_HOST || secrets.DATA_LAKE_TAILSCALE_HOST }}
               run: |
+                  {
+                    echo "### Data lake — diagnóstico"
+                    echo ""
+                    echo "| Variable | Definida |"
+                    echo "|----------|----------|"
+                  } >> "$GITHUB_STEP_SUMMARY"
+                  for name in DATA_LAKE_URL DATA_LAKE_UPLOAD_URL DATA_LAKE_USER DATA_LAKE_PASSWORD DATA_LAKE_STORAGE_PATH RELEASES_BASE TS_AUTHKEY DATA_LAKE_TAILSCALE_HOST; do
+                    if [[ -n "${!name:-}" ]]; then
+                      echo "| \`$name\` | sí |" >> "$GITHUB_STEP_SUMMARY"
+                    else
+                      echo "| \`$name\` | **no** |" >> "$GITHUB_STEP_SUMMARY"
+                    fi
+                  done
+
                   if [[ -n "${DATA_LAKE_URL}" && -n "${DATA_LAKE_USER}" && -n "${DATA_LAKE_PASSWORD}" ]]; then
                     echo "configured=true" >> "$GITHUB_OUTPUT"
+                    echo "::notice title=Data lake::Credenciales detectadas en variables o secrets."
                   else
                     echo "configured=false" >> "$GITHUB_OUTPUT"
-                    echo "::warning title=Data lake::Faltan los secrets DATA_LAKE_URL / DATA_LAKE_USER / DATA_LAKE_PASSWORD. El repositorio pacman NO se publicará (seguirá dando 404)."
+                    echo "::warning title=Data lake::Faltan DATA_LAKE_URL / DATA_LAKE_USER / DATA_LAKE_PASSWORD (en Secrets *o* en Variables). El repositorio pacman NO se publicará (seguirá dando 404)."
                   fi
 
                   if [[ -n "${TS_AUTHKEY}" ]]; then
@@ -356,21 +381,31 @@ jobs:
                   # El nodo es efímero si la auth key se creó con la casilla
                   # "Ephemeral" marcada (no existe la opción `--ephemeral`
                   # en `tailscale up`).
-                  authkey: ${{ secrets.TS_AUTHKEY }}
+                  authkey: ${{ vars.TS_AUTHKEY || secrets.TS_AUTHKEY }}
                   args: --hostname=rc-ci-${{ github.run_id }}
 
-            - name: Configure upload host over Tailscale
-              if: steps.ts.outcome == 'success'
+            - name: Configure data lake upload host
+              if: steps.lake.outputs.configured == 'true'
               env:
-                  CONFIGURED_UPLOAD_URL: ${{ secrets.DATA_LAKE_UPLOAD_URL }}
+                  CONFIGURED_UPLOAD_URL: ${{ vars.DATA_LAKE_UPLOAD_URL || secrets.DATA_LAKE_UPLOAD_URL }}
+                  FALLBACK_UPLOAD_URL: ${{ vars.DATA_LAKE_TAILSCALE_HOST || secrets.DATA_LAKE_TAILSCALE_HOST }}
+                  TAILSCALE_STATUS: ${{ steps.ts.outcome }}
               run: |
-                  # 1) secret explícito, 2) IP del servidor en la tailnet.
+                  # Prioridad:
+                  #   1) DATA_LAKE_UPLOAD_URL (variable o secreto) -> se usa tal cual.
+                  #   2) Si el runner se unió a la tailnet -> host de Tailscale.
+                  #   3) Sin Tailscale -> se sube directo a DATA_LAKE_URL.
                   if [[ -n "${CONFIGURED_UPLOAD_URL}" ]]; then
                     echo "DATA_LAKE_UPLOAD_URL=${CONFIGURED_UPLOAD_URL}" >> "$GITHUB_ENV"
+                    echo "::notice title=Data lake::Usando DATA_LAKE_UPLOAD_URL configurado (se ignora la IP por defecto)."
+                  elif [[ "${TAILSCALE_STATUS}" == "success" ]]; then
+                    TS_HOST="${FALLBACK_UPLOAD_URL:-http://100.105.212.100:30001}"
+                    echo "DATA_LAKE_UPLOAD_URL=${TS_HOST}" >> "$GITHUB_ENV"
+                    echo "::warning title=Data lake::DATA_LAKE_UPLOAD_URL no está definido; se usará Tailscale (${TS_HOST}). Defínelo como variable o secreto si el host es otro."
+                    tailscale status || true
                   else
-                    echo "DATA_LAKE_UPLOAD_URL=http://100.105.212.100:30001" >> "$GITHUB_ENV"
+                    echo "::notice title=Data lake::Sin DATA_LAKE_UPLOAD_URL ni Tailscale; se subirá usando DATA_LAKE_URL."
                   fi
-                  tailscale status || true
 
             - name: Publish GitHub Release
               uses: softprops/action-gh-release@v2
@@ -394,19 +429,19 @@ jobs:
             - name: Upload assets to data lake
               if: steps.lake.outputs.configured == 'true' && (github.event_name != 'workflow_dispatch' || inputs.publish_datalake)
               env:
-                  DATA_LAKE_URL: ${{ secrets.DATA_LAKE_URL }}
+                  DATA_LAKE_URL: ${{ vars.DATA_LAKE_URL || secrets.DATA_LAKE_URL }}
                   # DATA_LAKE_UPLOAD_URL se define en el paso anterior ($GITHUB_ENV):
-                  # secret explícito o, si hay TS_AUTHKEY, la IP de Tailscale.
-                  DATA_LAKE_USER: ${{ secrets.DATA_LAKE_USER }}
-                  DATA_LAKE_PASSWORD: ${{ secrets.DATA_LAKE_PASSWORD }}
-                  DATA_LAKE_STORAGE_PATH: ${{ secrets.DATA_LAKE_STORAGE_PATH }}
-                  RELEASES_BASE: ${{ secrets.RELEASES_BASE }}
+                  # valor configurado, o la IP de Tailscale solo como último recurso.
+                  DATA_LAKE_USER: ${{ vars.DATA_LAKE_USER || secrets.DATA_LAKE_USER }}
+                  DATA_LAKE_PASSWORD: ${{ vars.DATA_LAKE_PASSWORD || secrets.DATA_LAKE_PASSWORD }}
+                  DATA_LAKE_STORAGE_PATH: ${{ vars.DATA_LAKE_STORAGE_PATH || secrets.DATA_LAKE_STORAGE_PATH }}
+                  RELEASES_BASE: ${{ vars.RELEASES_BASE || secrets.RELEASES_BASE }}
               run: node scripts/upload-ci-assets.js "$GITHUB_WORKSPACE/release-assets"
 
             - name: Verify data lake publication
               if: steps.lake.outputs.configured == 'true'
               env:
-                  RELEASES_BASE: ${{ secrets.RELEASES_BASE }}
+                  RELEASES_BASE: ${{ vars.RELEASES_BASE || secrets.RELEASES_BASE }}
               run: |
                   set -euo pipefail
                   BASE="${RELEASES_BASE:-https://datalake.dambra-os.com/public/remote-controller/releases}"

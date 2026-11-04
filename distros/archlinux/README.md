@@ -34,6 +34,9 @@ O usa AUR: ver [`../aur/README.md`](../aur/README.md).
 ### Qué instala el paquete
 
 - **Electron/Chromium completo** (gtk3, nss, libx11, libxtst, libdrm…).
+- **Icono** en `/usr/share/icons/hicolor/512x512/apps/remotecontrollers.png`
+  (y en `/usr/share/pixmaps`), con el `.desktop` referenciando
+  `Icon=remotecontrollers`.
 - **Herramientas que la app usa siempre**: `ddcutil` (brillo/contraste),
   `polkit` (pkexec) y `xorg-xrandr` (modos en X11).
 - El AppImage se **desempaqueta** en `/opt/remotecontrollers`: no hace falta

@@ -44,7 +44,15 @@ rm -rf "$PKGROOT"
 mkdir -p "$PKGROOT"
 
 cp -f "$APPIMAGE" "$PKGROOT/remotecontrollers.AppImage"
-cp -f "$ROOT_DIR/assets/icon.png" "$PKGROOT/remotecontrollers.png"
+
+# Icono: se genera un PNG 512x512 real a partir de assets/icon.png (el PNG
+# original mide 2210x2210). Si no hay herramienta de imágenes se copia tal cual.
+bash "$ROOT_DIR/scripts/generate-icons.sh" >/dev/null
+if [[ -f "$DIST_DIR/icons/hicolor/512x512/apps/remotecontrollers.png" ]]; then
+  cp -f "$DIST_DIR/icons/hicolor/512x512/apps/remotecontrollers.png" "$PKGROOT/remotecontrollers.png"
+else
+  cp -f "$ROOT_DIR/assets/icon.png" "$PKGROOT/remotecontrollers.png"
+fi
 cp -f "$COMMON_DIR/remotecontrollers.desktop" "$PKGROOT/remotecontrollers.desktop"
 cp -f "$COMMON_DIR/remotecontrollers.sh" "$PKGROOT/remotecontrollers.sh"
 cp -f "$DISTRO_DIR/remotecontrollers.install" "$PKGROOT/remotecontrollers.install"

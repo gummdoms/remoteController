@@ -88,4 +88,5 @@ package() {
   install -Dm755 "$srcdir/remotecontrollers.sh" "$pkgdir/usr/bin/remotecontrollers"
   install -Dm644 "$srcdir/remotecontrollers.desktop" "$pkgdir/usr/share/applications/remotecontrollers.desktop"
   install -Dm644 "$srcdir/remotecontrollers.png" "$pkgdir/usr/share/icons/hicolor/512x512/apps/remotecontrollers.png"
+  install -Dm644 "$srcdir/remotecontrollers.png" "$pkgdir/usr/share/pixmaps/remotecontrollers.png"
 }

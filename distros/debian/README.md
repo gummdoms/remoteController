@@ -50,6 +50,9 @@ O abre **Remote Controllers** desde el menú de aplicaciones.
 
 - El runtime de **Electron/Chromium** completo y el AppImage **desempaquetado**
   en `/opt/remotecontrollers`: **no hace falta `libfuse2` ni FUSE**.
+- Iconos en **todas las resoluciones** de hicolor (16, 24, 32, 48, 64, 128, 256 y
+  512) más `/usr/share/pixmaps`, con el `.desktop` referenciando
+  `Icon=remotecontrollers`.
 - `/usr/bin/remotecontrollers`: launcher con soporte Wayland/X11 y fallback
   automático a `--no-sandbox` si el sandbox de Chromium está bloqueado.
 - `chrome-sandbox` con setuid root (algo imposible en un AppImage), por lo que

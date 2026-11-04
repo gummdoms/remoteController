@@ -87,10 +87,25 @@ if [[ -f "$SANDBOX" ]]; then
   chmod 4755 "$SANDBOX"
 fi
 
-# 4) Integración con el escritorio, launcher y configuración de /dev/uinput.
+# 4) Iconos (todas las resoluciones estándar) + integración con el escritorio,
+#    launcher y configuración de /dev/uinput.
+#    El .desktop usa `Icon=remotecontrollers`, que resuelve contra hicolor.
+bash "$ROOT_DIR/scripts/generate-icons.sh" >/dev/null
+ICON_TREE="$DIST_DIR/icons/hicolor"
+if [[ -d "$ICON_TREE" ]]; then
+  install -d "$PKG_ROOT/usr/share/icons"
+  cp -a "$ICON_TREE" "$PKG_ROOT/usr/share/icons/hicolor"
+  install -Dm644 "$ICON_TREE/512x512/apps/remotecontrollers.png" \
+    "$PKG_ROOT/usr/share/pixmaps/remotecontrollers.png"
+else
+  install -Dm644 "$ROOT_DIR/assets/icon.png" \
+    "$PKG_ROOT/usr/share/icons/hicolor/512x512/apps/remotecontrollers.png"
+  install -Dm644 "$ROOT_DIR/assets/icon.png" \
+    "$PKG_ROOT/usr/share/pixmaps/remotecontrollers.png"
+fi
+
 install -Dm755 "$COMMON_DIR/remotecontrollers.sh" "$PKG_ROOT/usr/bin/remotecontrollers"
 install -Dm644 "$COMMON_DIR/remotecontrollers.desktop" "$PKG_ROOT/usr/share/applications/remotecontrollers.desktop"
-install -Dm644 "$ROOT_DIR/assets/icon.png" "$PKG_ROOT/usr/share/icons/hicolor/512x512/apps/remotecontrollers.png"
 install -Dm644 "$DEBIAN_DIR/remotecontrollers-uinput.rules" "$PKG_ROOT/usr/lib/udev/rules.d/70-remotecontrollers-uinput.rules"
 install -Dm644 "$DEBIAN_DIR/remotecontrollers-uinput.conf" "$PKG_ROOT/usr/lib/modules-load.d/remotecontrollers-uinput.conf"
 install -Dm644 "$DEBIAN_DIR/copyright" "$PKG_ROOT/usr/share/doc/$PKG_NAME/copyright"
